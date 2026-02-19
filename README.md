@@ -154,9 +154,17 @@ cp .env.example .env
 
 ### Configure Your AI Agent
 
-Add to your agent's MCP configuration:
+Skill Swarm uses **stdio** transport — the AI client launches the Python process and communicates via stdin/stdout. This means the client is responsible for starting the server and passing environment variables.
 
-**Claude Code** (`~/.claude.json`):
+> **How secrets work with stdio:** Because the client spawns the process, the `env` block in the JSON config injects variables into the server's memory before execution. This is the preferred method for Claude and Gemini CLI. For sandboxed agents (Antigravity), use a `.env` file instead (see below).
+
+---
+
+#### Claude Code
+
+Claude Code fully supports `type`, `command`, `args`, and `env` fields.
+
+**Global** (`~/.claude.json`):
 
 ```json
 {
@@ -188,6 +196,70 @@ Add to your agent's MCP configuration:
   }
 }
 ```
+
+---
+
+#### Gemini CLI
+
+Gemini CLI infers transport from the field used — `command` = stdio. No `type` field needed. The `env` block works and supports `$VAR` / `${VAR}` substitution from host environment.
+
+**Config file:** `~/.gemini/settings.json`
+
+```json
+{
+  "mcpServers": {
+    "skill-swarm": {
+      "command": "/path/to/skill-swarm-mcp/.venv/bin/python",
+      "args": ["-m", "skill_swarm.server"],
+      "env": {
+        "SKILL_SWARM_GITHUB_TOKEN": "ghp_your_token_here"
+      }
+    }
+  }
+}
+```
+
+> **Note:** Omit `"type": "stdio"` — Gemini CLI infers it from `command`. Adding it may cause validation errors on older CLI versions.
+
+---
+
+#### Antigravity
+
+Antigravity runs agents in a **sandboxed environment** (Docker or local). If the agent doesn't have your home directory mounted, absolute paths to the Python binary will fail. Additionally, `env` injection from the JSON may be restricted in sandboxed mode.
+
+**Recommended approach:** Put the GitHub token in the `.env` file inside the skill-swarm directory so the server reads it from disk (Pydantic Settings loads `.env` automatically):
+
+```bash
+# /path/to/skill-swarm-mcp/.env
+SKILL_SWARM_GITHUB_TOKEN=ghp_your_token_here
+```
+
+**Config file:** `~/.gemini/antigravity/mcp_config.json`
+
+```json
+{
+  "mcpServers": {
+    "skill-swarm": {
+      "command": "/path/to/skill-swarm-mcp/.venv/bin/python",
+      "args": ["-m", "skill_swarm.server"]
+    }
+  }
+}
+```
+
+> **Note:** No `env` block — the server reads credentials from its `.env` file. Make sure the path to the Python binary is accessible from the agent's execution context.
+
+---
+
+#### Quick Comparison
+
+| | Claude Code | Gemini CLI | Antigravity |
+|---|---|---|---|
+| **Config file** | `~/.claude.json` or `.mcp.json` | `~/.gemini/settings.json` | `~/.gemini/antigravity/mcp_config.json` |
+| **Transport** | `"type": "stdio"` (explicit) | Inferred from `command` | Inferred from `command` |
+| **`env` in JSON** | Yes | Yes (with `$VAR` substitution) | Possible but prefer `.env` file |
+| **`type` field** | Supported | Omit (inferred) | Not used |
+| **Secrets method** | `env` block in JSON | `env` block in JSON | `.env` file on disk |
 
 ### Verify
 

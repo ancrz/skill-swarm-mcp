@@ -28,55 +28,102 @@ AI agents (Claude, Gemini, Copilot) need skills to be effective. Today, finding 
 
 ## How It Works
 
-```
-Agent asks: "I need database access"
-        |
-        v
-  [match_skills] ──> Local skill found? ──> Use it
-        |                                     |
-        | No match                            | cherry_pick_context
-        v                                     v
-  [search_skills] ──> 4 registries       Extract only the
-        |              in parallel        sections you need
-        v
-  [install_skill]
-     download -> security scan -> trust check -> install -> symlink
-        |
-        v
-  ~/.agent/skills/{name}/skill.md   <-- Global source of truth
-  ~/.claude/skills/{name}/          <-- Symlink (auto)
-  ~/.gemini/skills/{name}/          <-- Symlink (auto)
+```mermaid
+flowchart TD
+    A["🤖 Agent asks:<br/>'I need database access'"] --> B{match_skills}
+    B -->|Local skill found| C["✅ Use it"]
+    B -->|No match| D[search_skills]
+    D --> E["4 registries<br/>in parallel"]
+    E --> F[install_skill]
+    F --> G["download"]
+    G --> H["security scan"]
+    H --> I["trust check"]
+    I --> J["install"]
+    J --> K["symlink"]
+    K --> L["~/.agent/skills/{name}/skill.md"]
+    C --> M{Need partial context?}
+    M -->|Yes| N[cherry_pick_context]
+    M -->|No| O["📄 Full skill loaded"]
+    N --> P["Extract only<br/>sections you need"]
+
+    style A fill:#8B5CF6,stroke:#6D28D9,color:#fff
+    style C fill:#10B981,stroke:#059669,color:#fff
+    style L fill:#10B981,stroke:#059669,color:#fff
+    style F fill:#3B82F6,stroke:#2563EB,color:#fff
+    style D fill:#3B82F6,stroke:#2563EB,color:#fff
+    style N fill:#F59E0B,stroke:#D97706,color:#fff
 ```
 
 ### Architecture
 
+```mermaid
+graph TB
+    Agent["🤖 AI Agent (Claude, Gemini)"]
+    Agent -->|MCP Protocol stdio| Server
+
+    subgraph Server["skill-swarm MCP Server"]
+        direction TB
+        Tools["8 Tools · Python 3.13"]
+        subgraph Core["Core Engines"]
+            Matcher["Matcher V2<br/>BM25F + 7 signals"]
+            Trust["Trust Engine<br/>5 dimensions · git-quality"]
+        end
+        subgraph Infra["Infrastructure"]
+            Cache["Cache Layer<br/>TTL file · 1h/24h"]
+            Usage["Usage Tracker<br/>dead skill detection"]
+        end
+    end
+
+    Server --> Registries
+    Server --> Skills
+
+    subgraph Registries["4 Registries"]
+        MCP["MCP Registry"]
+        Smithery["Smithery"]
+        Glama["Glama.ai"]
+        GitHub["GitHub (+token)"]
+    end
+
+    subgraph Skills["~/.agent/skills/"]
+        SkillFile["{name}/skill.md"]
+        Symlinks["Symlinked to:<br/>~/.claude/skills/<br/>~/.gemini/skills/"]
+    end
+
+    style Agent fill:#8B5CF6,stroke:#6D28D9,color:#fff
+    style Server fill:#1E293B,stroke:#334155,color:#fff
+    style Tools fill:#334155,stroke:#475569,color:#fff
+    style Matcher fill:#3B82F6,stroke:#2563EB,color:#fff
+    style Trust fill:#3B82F6,stroke:#2563EB,color:#fff
+    style Cache fill:#475569,stroke:#64748B,color:#fff
+    style Usage fill:#475569,stroke:#64748B,color:#fff
+    style Skills fill:#10B981,stroke:#059669,color:#fff
 ```
-                    ┌─────────────────────────────────┐
-                    │         AI Agent (Claude)        │
-                    │   "I need to deploy to Docker"   │
-                    └───────────────┬─────────────────┘
-                                    │ MCP Protocol (stdio)
-                    ┌───────────────▼─────────────────┐
-                    │       skill-swarm MCP Server     │
-                    │          8 tools, Python 3.13    │
-                    ├─────────────────────────────────┤
-                    │  Matcher V2   │  Trust Engine    │
-                    │  BM25F + 7    │  5 dimensions    │
-                    │  signals      │  git-quality     │
-                    ├───────────────┼─────────────────┤
-                    │  Cache Layer  │  Usage Tracker   │
-                    │  TTL file     │  dead skill      │
-                    │  1h/24h       │  detection       │
-                    └───────┬───────┴────────┬────────┘
-                            │                │
-              ┌─────────────▼──┐   ┌─────────▼──────────┐
-              │  4 Registries  │   │  ~/.agent/skills/   │
-              │  MCP Registry  │   │  {name}/skill.md    │
-              │  Smithery      │   │                     │
-              │  Glama.ai      │   │  Symlinked to:      │
-              │  GitHub (+token)│   │  ~/.claude/skills/  │
-              └────────────────┘   │  ~/.gemini/skills/  │
-                                   └────────────────────┘
+
+### Install Pipeline
+
+```mermaid
+sequenceDiagram
+    participant A as AI Agent
+    participant S as skill-swarm
+    participant R as Registries
+    participant G as GitHub API
+    participant FS as Filesystem
+
+    A->>S: install_skill("pdf-parser", url)
+    S->>S: Download source
+    S->>S: Security scan (pattern matching)
+    alt scan fails
+        S-->>A: ❌ Blocked (security_score < 0.5)
+    end
+    S->>G: GET /repos/{owner}/{repo}
+    G-->>S: stars, license, pushed_at, archived
+    S->>S: Compute trust score (5 dimensions)
+    S->>FS: Write ~/.agent/skills/pdf-parser/skill.md
+    S->>FS: Symlink ~/.claude/skills/pdf-parser → source
+    S->>FS: Symlink ~/.gemini/skills/pdf-parser → source
+    S->>S: Update manifest.json + usage tracker
+    S->>S: Purge search cache
+    S-->>A: ✅ InstallResult (path, agents, scores)
 ```
 
 ---
@@ -92,8 +139,8 @@ Agent asks: "I need database access"
 ### Installation
 
 ```bash
-git clone https://github.com/ancrz/skill-swarm.git
-cd skill-swarm
+git clone https://github.com/ancrz/skill-swarm-mcp.git
+cd skill-swarm-mcp
 
 # Create virtual environment and install
 python3.13 -m venv .venv
@@ -116,7 +163,7 @@ Add to your agent's MCP configuration:
   "mcpServers": {
     "skill-swarm": {
       "type": "stdio",
-      "command": "/path/to/skill-swarm/.venv/bin/python",
+      "command": "/path/to/skill-swarm-mcp/.venv/bin/python",
       "args": ["-m", "skill_swarm.server"],
       "env": {
         "SKILL_SWARM_GITHUB_TOKEN": "ghp_your_token_here"
@@ -132,7 +179,7 @@ Add to your agent's MCP configuration:
 {
   "mcpServers": {
     "skill-swarm": {
-      "command": "/path/to/skill-swarm/.venv/bin/python",
+      "command": "/path/to/skill-swarm-mcp/.venv/bin/python",
       "args": ["-m", "skill_swarm.server"],
       "env": {
         "SKILL_SWARM_GITHUB_TOKEN": "ghp_your_token_here"
@@ -204,6 +251,15 @@ Skills follow the `.agent` standard for cross-agent compatibility:
 
 Every remote search result includes a trust score (0.0-1.0) computed from 5 git-quality dimensions:
 
+```mermaid
+pie title Trust Score Weights
+    "Maintenance" : 25
+    "Security" : 25
+    "Recency" : 20
+    "Popularity" : 20
+    "Completeness" : 10
+```
+
 | Dimension | Weight | Signals |
 |-----------|--------|---------|
 | **Recency** | 0.20 | Exponential decay since last push (half-life: 180 days) |
@@ -227,6 +283,31 @@ Every remote search result includes a trust score (0.0-1.0) computed from 5 git-
 
 Local skill matching uses 7 weighted signals:
 
+```mermaid
+graph LR
+    Q["Query"] --> E["Exact Match<br/>w=30"]
+    Q --> P["Prefix Match<br/>w=20"]
+    Q --> PH["Phrase Match<br/>w=15"]
+    Q --> B["BM25F<br/>w=15"]
+    Q --> J["Jaccard Tags<br/>w=10"]
+    Q --> FN["Fuzzy Name<br/>w=7"]
+    Q --> FD["Fuzzy Desc<br/>w=3"]
+
+    E --> S["Σ Weighted Score<br/>0.0 – 1.0"]
+    P --> S
+    PH --> S
+    B --> S
+    J --> S
+    FN --> S
+    FD --> S
+
+    style Q fill:#8B5CF6,stroke:#6D28D9,color:#fff
+    style S fill:#10B981,stroke:#059669,color:#fff
+    style E fill:#EF4444,stroke:#DC2626,color:#fff
+    style P fill:#F97316,stroke:#EA580C,color:#fff
+    style B fill:#3B82F6,stroke:#2563EB,color:#fff
+```
+
 | Signal | Weight | Description |
 |--------|--------|-------------|
 | Exact match | 30 | Query equals skill name |
@@ -247,7 +328,28 @@ BM25F parameters optimized for small corpus (10-100 skills): k1=1.2, b=0.3.
 |----------|--------|-------|
 | **Linux** | Full support | Primary development platform |
 | **macOS** | Full support | Same Python ecosystem |
-| **Windows** | Compatible | WSL recommended for symlinks |
+| **Windows** | Full support | Native symlinks supported (see below) |
+
+### Windows Symlinks
+
+Skill Swarm uses directory symlinks (`os.symlink`) to share skills across agents. Windows supports native NTFS symlinks:
+
+| Windows Version | Requirement |
+|----------------|-------------|
+| **Windows 11** | No configuration needed — symlinks work for all users |
+| **Windows 10** (Creators Update+) | Enable **Developer Mode**: Settings → Update & Security → For Developers |
+| **Windows 10** (older builds) | Run as Administrator |
+
+Python's `os.symlink()` works natively on Windows when the above permissions are met. No WSL required.
+
+**Manual creation** (if needed):
+```powershell
+# PowerShell
+New-Item -ItemType SymbolicLink -Path "$HOME\.claude\skills\my-skill" -Target "$HOME\.agent\skills\my-skill"
+
+# Command Prompt (Administrator)
+mklink /D "%USERPROFILE%\.claude\skills\my-skill" "%USERPROFILE%\.agent\skills\my-skill"
+```
 
 **AI Agent Compatibility:**
 
@@ -349,5 +451,7 @@ Copyright 2025 Anthony Cruz
 <div align="center">
 
 **Built with MCP Protocol and AI-assisted engineering.**
+
+[⬆ Back to Top](#skill-swarm)
 
 </div>

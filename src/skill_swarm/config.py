@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     skillssh_github_fallback: bool = True  # GitHub topic search when npx unavailable
     skillssh_search_timeout: float = 30.0  # npx can be slow on first run
 
-    model_config = {"env_prefix": "SKILL_SWARM_", "env_file": ".env", "env_file_encoding": "utf-8"}
+    model_config = {"env_prefix": "SKILL_SWARM_", "env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
     @property
     def manifest_path(self) -> Path:

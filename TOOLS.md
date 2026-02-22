@@ -6,16 +6,16 @@ Complete reference for all 8 tools exposed by the skill-swarm MCP server.
 
 ## Overview
 
-| Tool | Purpose | Scope |
-|------|---------|-------|
-| [search_skills](#search_skills) | Find skills across 4 registries with trust scoring | Remote + Local |
-| [match_skills](#match_skills) | BM25F + 7-signal matching of installed skills | Local |
-| [install_skill](#install_skill) | Download, scan, trust-check, and install globally | Remote → Local |
-| [uninstall_skill](#uninstall_skill) | Remove skill, symlinks, and tracking data | Local |
-| [list_skills](#list_skills) | Inventory with health, symlinks, and usage stats | Local |
-| [get_skill_info](#get_skill_info) | Full metadata, content, and usage of a skill | Local |
-| [cherry_pick_context](#cherry_pick_context) | Extract specific markdown sections from a skill | Local |
-| [skill_health](#skill_health) | Usage analytics and dead skill detection | Local |
+| Tool                                        | Purpose                                            | Scope          |
+| ------------------------------------------- | -------------------------------------------------- | -------------- |
+| [search_skills](#search_skills)             | Find skills across 4 registries with trust scoring | Remote + Local |
+| [match_skills](#match_skills)               | BM25F + 7-signal matching of installed skills      | Local          |
+| [install_skill](#install_skill)             | Download, scan, trust-check, and install globally  | Remote → Local |
+| [uninstall_skill](#uninstall_skill)         | Remove skill, symlinks, and tracking data          | Local          |
+| [list_skills](#list_skills)                 | Inventory with health, symlinks, and usage stats   | Local          |
+| [get_skill_info](#get_skill_info)           | Full metadata, content, and usage of a skill       | Local          |
+| [cherry_pick_context](#cherry_pick_context) | Extract specific markdown sections from a skill    | Local          |
+| [skill_health](#skill_health)               | Usage analytics and dead skill detection           | Local          |
 
 ---
 
@@ -36,6 +36,7 @@ Complete reference for all 8 tools exposed by the skill-swarm MCP server.
 Search for skills across 4 remote registries with trust scoring, plus local installed skills.
 
 **Registries searched** (in parallel):
+
 - Official MCP Registry (`registry.modelcontextprotocol.io`)
 - Smithery (`registry.smithery.ai`)
 - Glama.ai (`glama.ai`)
@@ -43,11 +44,11 @@ Search for skills across 4 remote registries with trust scoring, plus local inst
 
 ### Parameters
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `query` | `string` | *(required)* | What you want to do (e.g. "parse PDF", "deploy docker") |
-| `scope` | `string` | `"all"` | Where to search: `"local"`, `"remote"`, or `"all"` |
-| `limit` | `integer` | `5` | Maximum number of results to return |
+| Parameter | Type      | Default      | Description                                             |
+| --------- | --------- | ------------ | ------------------------------------------------------- |
+| `query`   | `string`  | _(required)_ | What you want to do (e.g. "parse PDF", "deploy docker") |
+| `scope`   | `string`  | `"all"`      | Where to search: `"local"`, `"remote"`, or `"all"`      |
+| `limit`   | `integer` | `5`          | Maximum number of results to return                     |
 
 ### Returns
 
@@ -69,9 +70,9 @@ JSON array of `SearchResult` objects:
       "dimensions": {
         "recency": 0.92,
         "popularity": 0.65,
-        "maintenance": 0.80,
+        "maintenance": 0.8,
         "security": 0.85,
-        "completeness": 0.70
+        "completeness": 0.7
       }
     }
   }
@@ -80,34 +81,34 @@ JSON array of `SearchResult` objects:
 
 ### Fields
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `name` | `string` | Skill/server name |
-| `description` | `string` | What the skill does |
-| `source` | `string` | Origin: `"local"`, `"smithery"`, `"github"`, `"mcp_registry"`, `"glama"` |
-| `url` | `string` | Download URL or repository link |
-| `relevance` | `float` | Match quality 0.0-1.0 |
-| `tags` | `string[]` | Categorization tags |
-| `trust` | `TrustScore\|null` | Git-quality trust score (null for local results) |
+| Field         | Type               | Description                                                              |
+| ------------- | ------------------ | ------------------------------------------------------------------------ |
+| `name`        | `string`           | Skill/server name                                                        |
+| `description` | `string`           | What the skill does                                                      |
+| `source`      | `string`           | Origin: `"local"`, `"smithery"`, `"github"`, `"mcp_registry"`, `"glama"` |
+| `url`         | `string`           | Download URL or repository link                                          |
+| `relevance`   | `float`            | Match quality 0.0-1.0                                                    |
+| `tags`        | `string[]`         | Categorization tags                                                      |
+| `trust`       | `TrustScore\|null` | Git-quality trust score (null for local results)                         |
 
 ### Trust Score Dimensions
 
-| Dimension | Weight | Signals |
-|-----------|--------|---------|
-| `recency` | 0.20 | Exponential decay since last push (half-life: 180 days) |
-| `popularity` | 0.20 | Log-normalized stars, forks, watchers |
-| `maintenance` | 0.25 | Push frequency, open issues ratio |
-| `security` | 0.25 | License trust level (MIT=1.0, GPL=0.5, none=0.1), archived penalty |
-| `completeness` | 0.10 | Description, homepage, topics, README presence |
+| Dimension      | Weight | Signals                                                            |
+| -------------- | ------ | ------------------------------------------------------------------ |
+| `recency`      | 0.20   | Exponential decay since last push (half-life: 180 days)            |
+| `popularity`   | 0.20   | Log-normalized stars, forks, watchers                              |
+| `maintenance`  | 0.25   | Push frequency, open issues ratio                                  |
+| `security`     | 0.25   | License trust level (MIT=1.0, GPL=0.5, none=0.1), archived penalty |
+| `completeness` | 0.10   | Description, homepage, topics, README presence                     |
 
 ### Trust Verdicts
 
-| Score | Verdict | Recommended Action |
-|-------|---------|-------------------|
-| >= 0.75 | `TRUST` | Safe to auto-install |
-| 0.50-0.74 | `CAUTION` | Show to agent for review |
+| Score     | Verdict   | Recommended Action        |
+| --------- | --------- | ------------------------- |
+| >= 0.75   | `TRUST`   | Safe to auto-install      |
+| 0.50-0.74 | `CAUTION` | Show to agent for review  |
 | 0.25-0.49 | `WARNING` | Manual review recommended |
-| < 0.25 | `REJECT` | Block installation |
+| < 0.25    | `REJECT`  | Block installation        |
 
 ### Examples
 
@@ -138,10 +139,10 @@ This is the **first tool to call** when you need a skill — check what's alread
 
 ### Parameters
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `task_description` | `string` | *(required)* | What you want to accomplish |
-| `threshold` | `float` | `0.05` | Minimum relevance score (0.0-1.0). Default 0.05 = 5% |
+| Parameter          | Type     | Default      | Description                                          |
+| ------------------ | -------- | ------------ | ---------------------------------------------------- |
+| `task_description` | `string` | _(required)_ | What you want to accomplish                          |
+| `threshold`        | `float`  | `0.05`       | Minimum relevance score (0.0-1.0). Default 0.05 = 5% |
 
 ### Returns
 
@@ -161,19 +162,20 @@ JSON array of matched skills:
 
 ### 7 Scoring Signals
 
-| Signal | Weight | Description |
-|--------|--------|-------------|
-| Exact match | 30 | Query equals skill name |
-| Prefix match | 20 | Skill name starts with query |
-| Phrase match | 15 | Query found as substring in any field |
-| BM25F | 15 | Field-weighted relevance (name=3x, tags=2x, desc=1x) |
-| Jaccard tags | 10 | Set similarity on tag sets |
-| Fuzzy name | 7 | Typo-tolerant name matching (rapidfuzz) |
-| Fuzzy description | 3 | Partial match on description |
+| Signal            | Weight | Description                                          |
+| ----------------- | ------ | ---------------------------------------------------- |
+| Exact match       | 30     | Query equals skill name                              |
+| Prefix match      | 20     | Skill name starts with query                         |
+| Phrase match      | 15     | Query found as substring in any field                |
+| BM25F             | 15     | Field-weighted relevance (name=3x, tags=2x, desc=1x) |
+| Jaccard tags      | 10     | Set similarity on tag sets                           |
+| Fuzzy name        | 7      | Typo-tolerant name matching (rapidfuzz)              |
+| Fuzzy description | 3      | Partial match on description                         |
 
 ### BM25F Parameters
 
 Optimized for small corpus (10-100 skills):
+
 - `k1 = 1.2` — term frequency saturation
 - `b = 0.3` — low length normalization (skills are short documents)
 - IDF: `log(1 + (N - df + 0.5) / (df + 0.5))`
@@ -209,20 +211,20 @@ download source → security scan → trust check → install to ~/.agent/skills
 
 ### Parameters
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `name` | `string` | *(required)* | Skill identifier (e.g. `"pdf-parser"`) |
-| `source` | `string` | *(required)* | URL (markdown, GitHub repo) or local path |
-| `agents` | `string` | `"claude,gemini"` | Comma-separated agent names to create symlinks for |
+| Parameter | Type     | Default           | Description                                        |
+| --------- | -------- | ----------------- | -------------------------------------------------- |
+| `name`    | `string` | _(required)_      | Skill identifier (e.g. `"pdf-parser"`)             |
+| `source`  | `string` | _(required)_      | URL (markdown, GitHub repo) or local path          |
+| `agents`  | `string` | `"claude,gemini"` | Comma-separated agent names to create symlinks for |
 
 ### Accepted Source Formats
 
-| Format | Example |
-|--------|---------|
-| GitHub repo URL | `https://github.com/owner/repo` |
-| Raw file URL | `https://raw.githubusercontent.com/owner/repo/main/skill.md` |
-| Direct markdown URL | `https://example.com/my-skill.md` |
-| Local file path | `/home/user/skills/my-skill.md` |
+| Format              | Example                                                      |
+| ------------------- | ------------------------------------------------------------ |
+| GitHub repo URL     | `https://github.com/owner/repo`                              |
+| Raw file URL        | `https://raw.githubusercontent.com/owner/repo/main/skill.md` |
+| Direct markdown URL | `https://example.com/my-skill.md`                            |
+| Local file path     | `/home/user/skills/my-skill.md`                              |
 
 ### Returns
 
@@ -242,19 +244,20 @@ JSON `InstallResult` object:
 
 ### Fields
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `skill_name` | `string` | Name used for installation |
-| `success` | `boolean` | Whether installation succeeded |
-| `install_path` | `string` | Final path of the installed skill file |
-| `agents_linked` | `string[]` | Agents that received symlinks |
-| `security_score` | `float` | Security scan result (0.0-1.0) |
-| `trust_score` | `float\|null` | Trust score if remote source |
-| `errors` | `string[]` | Any errors encountered |
+| Field            | Type          | Description                            |
+| ---------------- | ------------- | -------------------------------------- |
+| `skill_name`     | `string`      | Name used for installation             |
+| `success`        | `boolean`     | Whether installation succeeded         |
+| `install_path`   | `string`      | Final path of the installed skill file |
+| `agents_linked`  | `string[]`    | Agents that received symlinks          |
+| `security_score` | `float`       | Security scan result (0.0-1.0)         |
+| `trust_score`    | `float\|null` | Trust score if remote source           |
+| `errors`         | `string[]`    | Any errors encountered                 |
 
 ### Security Scan
 
 The scanner checks for dangerous patterns before installation:
+
 - `eval()`, `exec()`, `os.system()` calls
 - Shell injection patterns
 - Filesystem destruction (`shutil.rmtree("/")`)
@@ -304,9 +307,9 @@ Remove a skill, all agent symlinks, and usage tracking data.
 
 ### Parameters
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `name` | `string` | *(required)* | Skill name to remove |
+| Parameter | Type     | Default      | Description          |
+| --------- | -------- | ------------ | -------------------- |
+| `name`    | `string` | _(required)_ | Skill name to remove |
 
 ### Returns
 
@@ -351,9 +354,9 @@ List all installed skills with metadata, symlink health status, usage stats, and
 
 ### Parameters
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `agent` | `string` | `"all"` | Filter by agent name (`"claude"`, `"gemini"`) or `"all"` |
+| Parameter | Type     | Default | Description                                              |
+| --------- | -------- | ------- | -------------------------------------------------------- |
+| `agent`   | `string` | `"all"` | Filter by agent name (`"claude"`, `"gemini"`) or `"all"` |
 
 ### Returns
 
@@ -387,12 +390,12 @@ List all installed skills with metadata, symlink health status, usage stats, and
 
 ### Symlink Health Status
 
-| Status | Meaning |
-|--------|---------|
-| `"ok"` | Symlink exists and resolves to a valid `skill.md` |
-| `"broken"` | Symlink exists but `skill.md` is missing inside |
-| `"directory (not symlink)"` | Path exists as a real directory, not a symlink |
-| `"missing"` | No symlink or directory found for this agent |
+| Status                      | Meaning                                           |
+| --------------------------- | ------------------------------------------------- |
+| `"ok"`                      | Symlink exists and resolves to a valid `skill.md` |
+| `"broken"`                  | Symlink exists but `skill.md` is missing inside   |
+| `"directory (not symlink)"` | Path exists as a real directory, not a symlink    |
+| `"missing"`                 | No symlink or directory found for this agent      |
 
 ### Dead Skills
 
@@ -418,9 +421,9 @@ Calling this tool counts as a **full_read** in usage tracking.
 
 ### Parameters
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `name` | `string` | *(required)* | Skill name to inspect |
+| Parameter | Type     | Default      | Description           |
+| --------- | -------- | ------------ | --------------------- |
+| `name`    | `string` | _(required)_ | Skill name to inspect |
 
 ### Returns
 
@@ -450,11 +453,11 @@ Calling this tool counts as a **full_read** in usage tracking.
 
 ### Symlink Status Values
 
-| Status | Meaning |
-|--------|---------|
-| `"linked"` | Symlink exists and resolves correctly |
-| `"directory (not symlink)"` | Real directory, not a symlink |
-| `"not linked"` | No symlink exists for this agent |
+| Status                      | Meaning                               |
+| --------------------------- | ------------------------------------- |
+| `"linked"`                  | Symlink exists and resolves correctly |
+| `"directory (not symlink)"` | Real directory, not a symlink         |
+| `"not linked"`              | No symlink exists for this agent      |
 
 ### Error Response
 
@@ -485,10 +488,10 @@ Calling this tool counts as a **cherry_pick** event in usage tracking.
 
 ### Parameters
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `skill_name` | `string` | *(required)* | Name of the installed skill |
-| `sections` | `string` | *(required)* | Comma-separated section names (e.g. `"Rollback,Health Check"`) |
+| Parameter    | Type     | Default      | Description                                                    |
+| ------------ | -------- | ------------ | -------------------------------------------------------------- |
+| `skill_name` | `string` | _(required)_ | Name of the installed skill                                    |
+| `sections`   | `string` | _(required)_ | Comma-separated section names (e.g. `"Rollback,Health Check"`) |
 
 ### Section Matching
 
@@ -500,7 +503,7 @@ Sections are matched in order of specificity:
 
 ### Returns
 
-```json
+````json
 {
   "skill_name": "docker-ops",
   "sections_requested": ["Rollback", "Health Check"],
@@ -518,18 +521,18 @@ Sections are matched in order of specificity:
   ],
   "not_found": []
 }
-```
+````
 
 ### Fields
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `skill_name` | `string` | The skill inspected |
-| `sections_requested` | `string[]` | What was requested |
-| `sections_extracted` | `integer` | How many sections were found |
-| `content` | `object` | Map of section header → section content |
-| `available_sections` | `string[]` | All sections available in the skill |
-| `not_found` | `string[]` | Requested sections that had no match |
+| Field                | Type       | Description                             |
+| -------------------- | ---------- | --------------------------------------- |
+| `skill_name`         | `string`   | The skill inspected                     |
+| `sections_requested` | `string[]` | What was requested                      |
+| `sections_extracted` | `integer`  | How many sections were found            |
+| `content`            | `object`   | Map of section header → section content |
+| `available_sections` | `string[]` | All sections available in the skill     |
+| `not_found`          | `string[]` | Requested sections that had no match    |
 
 ### Error Response
 
@@ -608,22 +611,22 @@ None.
 
 ### Usage Classifications
 
-| Classification | Criteria | Recommendation |
-|---------------|----------|----------------|
-| `"full"` | Read complete at least once (`full_read_count > 0`) | Active — keep installed |
-| `"cherry_pick_only"` | Only partial extractions (`cherry_pick_count > 0`) | Active — likely a reference skill |
-| `"match_only"` | Appears in matches but never read (`match_hits > 0`) | Review — may not be needed |
-| `"dead"` | Never matched, read, or cherry-picked | Remove — wasting space |
+| Classification       | Criteria                                             | Recommendation                    |
+| -------------------- | ---------------------------------------------------- | --------------------------------- |
+| `"full"`             | Read complete at least once (`full_read_count > 0`)  | Active — keep installed           |
+| `"cherry_pick_only"` | Only partial extractions (`cherry_pick_count > 0`)   | Active — likely a reference skill |
+| `"match_only"`       | Appears in matches but never read (`match_hits > 0`) | Review — may not be needed        |
+| `"dead"`             | Never matched, read, or cherry-picked                | Remove — wasting space            |
 
 ### Cache Stats
 
-| Field | Description |
-|-------|-------------|
-| `cache_dir` | Location of the cache directory |
-| `total_entries` | Total cached items (search results + trust scores) |
-| `expired_entries` | Items past their TTL |
-| `active_entries` | Items still within TTL |
-| `size_bytes` | Total cache size on disk |
+| Field             | Description                                        |
+| ----------------- | -------------------------------------------------- |
+| `cache_dir`       | Location of the cache directory                    |
+| `total_entries`   | Total cached items (search results + trust scores) |
+| `expired_entries` | Items past their TTL                               |
+| `active_entries`  | Items still within TTL                             |
+| `size_bytes`      | Total cache size on disk                           |
 
 ### Examples
 
@@ -640,39 +643,39 @@ skill_health()
 
 Metadata stored in the global manifest for each installed skill.
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `name` | `string` | *(required)* | Skill identifier |
-| `description` | `string` | `""` | What the skill does |
-| `version` | `string` | `"0.1.0"` | Semantic version |
-| `tags` | `string[]` | `[]` | Categorization tags |
-| `source` | `string` | `""` | URL or registry where it was found |
-| `agents` | `string[]` | `["claude", "gemini"]` | Agents this skill is linked to |
-| `installed_path` | `string` | `""` | Filesystem path of installation |
+| Field            | Type       | Default                | Description                        |
+| ---------------- | ---------- | ---------------------- | ---------------------------------- |
+| `name`           | `string`   | _(required)_           | Skill identifier                   |
+| `description`    | `string`   | `""`                   | What the skill does                |
+| `version`        | `string`   | `"0.1.0"`              | Semantic version                   |
+| `tags`           | `string[]` | `[]`                   | Categorization tags                |
+| `source`         | `string`   | `""`                   | URL or registry where it was found |
+| `agents`         | `string[]` | `["claude", "gemini"]` | Agents this skill is linked to     |
+| `installed_path` | `string`   | `""`                   | Filesystem path of installation    |
 
 ### TrustScore
 
 Git-quality trust assessment for remote skills.
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `score` | `float` | Composite trust score 0.0-1.0 |
-| `confidence` | `float` | Data completeness factor 0.0-1.0 |
-| `verdict` | `string` | `TRUST`, `CAUTION`, `WARNING`, or `REJECT` |
+| Field        | Type     | Description                                                                            |
+| ------------ | -------- | -------------------------------------------------------------------------------------- |
+| `score`      | `float`  | Composite trust score 0.0-1.0                                                          |
+| `confidence` | `float`  | Data completeness factor 0.0-1.0                                                       |
+| `verdict`    | `string` | `TRUST`, `CAUTION`, `WARNING`, or `REJECT`                                             |
 | `dimensions` | `object` | Individual dimension scores (recency, popularity, maintenance, security, completeness) |
 
 ### SkillUsageStats
 
 Per-skill usage tracking data.
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `match_hits` | `integer` | Times appeared in match/search results |
-| `cherry_pick_count` | `integer` | Times sections were extracted |
-| `full_read_count` | `integer` | Times read completely |
-| `last_used` | `string` | ISO timestamp of last interaction |
-| `last_usage_type` | `string` | Type of last event: `match`, `cherry_pick`, `full_read`, `search` |
-| `installed_at` | `string` | ISO timestamp of installation |
+| Field               | Type      | Description                                                       |
+| ------------------- | --------- | ----------------------------------------------------------------- |
+| `match_hits`        | `integer` | Times appeared in match/search results                            |
+| `cherry_pick_count` | `integer` | Times sections were extracted                                     |
+| `full_read_count`   | `integer` | Times read completely                                             |
+| `last_used`         | `string`  | ISO timestamp of last interaction                                 |
+| `last_usage_type`   | `string`  | Type of last event: `match`, `cherry_pick`, `full_read`, `search` |
+| `installed_at`      | `string`  | ISO timestamp of installation                                     |
 
 ---
 
@@ -680,11 +683,15 @@ Per-skill usage tracking data.
 
 All settings use the `SKILL_SWARM_` prefix and can be set via environment variables or `.env` file.
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `SKILL_SWARM_GITHUB_TOKEN` | *(empty)* | GitHub PAT for API access (5000 req/hr vs 60) |
-| `SKILL_SWARM_CACHE_SEARCH_TTL` | `3600` | Search cache TTL in seconds |
-| `SKILL_SWARM_CACHE_TRUST_TTL` | `86400` | Trust score cache TTL in seconds |
-| `SKILL_SWARM_SEARCH_TIMEOUT` | `15.0` | HTTP timeout for registry queries |
-| `SKILL_SWARM_SEARCH_MAX_RESULTS` | `10` | Max results per search query |
-| `SKILL_SWARM_SECURITY_THRESHOLD` | `0.5` | Min security scan score to allow installation |
+| Variable                               | Default   | Description                                   |
+| -------------------------------------- | --------- | --------------------------------------------- |
+| `SKILL_SWARM_GITHUB_TOKEN`             | _(empty)_ | GitHub PAT for API access (5000 req/hr vs 60) |
+| `SKILL_SWARM_CACHE_SEARCH_TTL`         | `3600`    | Search cache TTL in seconds                   |
+| `SKILL_SWARM_CACHE_TRUST_TTL`          | `86400`   | Trust score cache TTL in seconds              |
+| `SKILL_SWARM_SEARCH_TIMEOUT`           | `15.0`    | HTTP timeout for registry queries             |
+| `SKILL_SWARM_SEARCH_MAX_RESULTS`       | `10`      | Max results per search query                  |
+| `SKILL_SWARM_SECURITY_THRESHOLD`       | `0.5`     | Min security scan score to allow installation |
+| `SKILL_SWARM_SKILLSSH_ENABLED`         | `true`    | Enable Skills.sh as primary registry          |
+| `SKILL_SWARM_SKILLSSH_NPX_PATH`        | `npx`     | Path to npx binary for `skills find`          |
+| `SKILL_SWARM_SKILLSSH_GITHUB_FALLBACK` | `true`    | Use GitHub topic search when npx unavailable  |
+| `SKILL_SWARM_SKILLSSH_SEARCH_TIMEOUT`  | `30.0`    | Timeout for npx subprocess calls              |

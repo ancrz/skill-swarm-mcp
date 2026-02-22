@@ -10,8 +10,12 @@ dist/
 build/
 .venv/
 
-# Testing
+# Testing & Linting
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
 
 # IDE
 .vscode/
@@ -23,3 +27,6 @@ build/
 # OS
 .DS_Store
 Thumbs.db
+
+# Docs (internal, not tracked)
+docs/

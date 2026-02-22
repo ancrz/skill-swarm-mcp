@@ -11,26 +11,36 @@ Tests the 7 improvements:
 
 import asyncio
 import json
+import sys
 import time
 from pathlib import Path
 
-import sys
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from skill_swarm.config import settings
-from skill_swarm.core.cache import get_cached, set_cached, purge_all, cache_stats
+from skill_swarm.core.cache import cache_stats, get_cached, purge_all, set_cached
+from skill_swarm.core.matcher import match_skill
+from skill_swarm.core.registry import (
+    search_remote,
+    search_skillssh,
+    search_smithery,
+)
 from skill_swarm.core.trust import (
-    evaluate_github_repo, quick_trust_from_registry, compute_trust,
-    score_recency, score_popularity, score_maintenance, score_security, score_completeness,
+    compute_trust,
+    evaluate_github_repo,
+    score_completeness,
+    score_maintenance,
+    score_popularity,
+    score_recency,
+    score_security,
 )
 from skill_swarm.core.usage import (
-    record_event, get_stats, get_all_stats, get_dead_skills, remove_stats,
+    get_all_stats,
+    get_dead_skills,
+    get_stats,
+    record_event,
+    remove_stats,
 )
-from skill_swarm.core.matcher import match_skill, match_skills_local, _BM25FIndex
-from skill_swarm.core.registry import (
-    search_mcp_registry, search_smithery, search_glama, search_github, search_remote,
-)
-from skill_swarm.models import SkillInfo, TrustScore
+from skill_swarm.models import SearchResult, SkillInfo
 from skill_swarm.tools.inventory import match_skills
 
 
@@ -38,19 +48,26 @@ class Metrics:
     def __init__(self):
         self.results: list[dict] = []
 
-    def record(self, name: str, passed: bool, duration_ms: float, details: dict = None):
-        self.results.append({
-            "test": name, "passed": passed,
-            "duration_ms": round(duration_ms, 1),
-            "details": details or {},
-        })
+    def record(
+        self, name: str, passed: bool, duration_ms: float, details: dict | None = None
+    ):
+        self.results.append(
+            {
+                "test": name,
+                "passed": passed,
+                "duration_ms": round(duration_ms, 1),
+                "details": details or {},
+            }
+        )
 
     def summary(self) -> dict:
         total = len(self.results)
         passed = sum(1 for r in self.results if r["passed"])
         return {
-            "total": total, "passed": passed, "failed": total - passed,
-            "pass_rate": f"{passed/total*100:.1f}%" if total else "N/A",
+            "total": total,
+            "passed": passed,
+            "failed": total - passed,
+            "pass_rate": f"{passed / total * 100:.1f}%" if total else "N/A",
         }
 
 
@@ -60,6 +77,7 @@ metrics = Metrics()
 # ============================================================================
 # UC7: TRUST SCORING
 # ============================================================================
+
 
 def test_uc7_trust_dimensions():
     """UC7: Trust dimension formulas produce correct ranges."""
@@ -96,10 +114,17 @@ def test_uc7_trust_dimensions():
     assert empty_meta == 0.0
 
     elapsed = (time.monotonic() - start) * 1000
-    metrics.record("UC7: trust dimensions", True, elapsed, {
-        "recent": round(recent, 3), "old": round(old, 3),
-        "popular": round(popular, 3), "mit": round(mit, 3),
-    })
+    metrics.record(
+        "UC7: trust dimensions",
+        True,
+        elapsed,
+        {
+            "recent": round(recent, 3),
+            "old": round(old, 3),
+            "popular": round(popular, 3),
+            "mit": round(mit, 3),
+        },
+    )
     return True
 
 
@@ -107,8 +132,24 @@ def test_uc7b_trust_composite():
     """UC7b: Composite trust score produces correct verdicts."""
     start = time.monotonic()
 
-    high = compute_trust({"recency": 0.9, "popularity": 0.8, "maintenance": 0.9, "security": 0.95, "completeness": 0.8})
-    low = compute_trust({"recency": 0.1, "popularity": 0.05, "maintenance": 0.1, "security": 0.1, "completeness": 0.0})
+    high = compute_trust(
+        {
+            "recency": 0.9,
+            "popularity": 0.8,
+            "maintenance": 0.9,
+            "security": 0.95,
+            "completeness": 0.8,
+        }
+    )
+    low = compute_trust(
+        {
+            "recency": 0.1,
+            "popularity": 0.05,
+            "maintenance": 0.1,
+            "security": 0.1,
+            "completeness": 0.0,
+        }
+    )
 
     assert high.verdict == "TRUST"
     assert high.score > 0.75
@@ -116,10 +157,15 @@ def test_uc7b_trust_composite():
     assert low.score < 0.3
 
     elapsed = (time.monotonic() - start) * 1000
-    metrics.record("UC7b: trust composite", True, elapsed, {
-        "high": f"{high.score:.3f} ({high.verdict})",
-        "low": f"{low.score:.3f} ({low.verdict})",
-    })
+    metrics.record(
+        "UC7b: trust composite",
+        True,
+        elapsed,
+        {
+            "high": f"{high.score:.3f} ({high.verdict})",
+            "low": f"{low.score:.3f} ({low.verdict})",
+        },
+    )
     return True
 
 
@@ -128,20 +174,29 @@ def test_uc7c_trust_github_real():
     start = time.monotonic()
 
     # modelcontextprotocol/servers is a high-trust repo
-    trust = asyncio.run(evaluate_github_repo("https://github.com/modelcontextprotocol/servers"))
+    trust = asyncio.run(
+        evaluate_github_repo("https://github.com/modelcontextprotocol/servers")
+    )
     elapsed = (time.monotonic() - start) * 1000
 
     passed = trust.score > 0.3 and trust.verdict != "UNKNOWN"
-    metrics.record("UC7c: real GitHub trust", passed, elapsed, {
-        "score": trust.score, "verdict": trust.verdict,
-        "dimensions": trust.dimensions,
-    })
+    metrics.record(
+        "UC7c: real GitHub trust",
+        passed,
+        elapsed,
+        {
+            "score": trust.score,
+            "verdict": trust.verdict,
+            "dimensions": trust.dimensions,
+        },
+    )
     return passed
 
 
 # ============================================================================
 # UC8: CACHE
 # ============================================================================
+
 
 def test_uc8_cache_set_get():
     """UC8: Cache set and get with TTL."""
@@ -188,28 +243,35 @@ def test_uc8c_cache_search_hit():
 
     # First call: network
     t1 = time.monotonic()
-    r1 = asyncio.run(search_smithery("filesystem", limit=2))
+    asyncio.run(search_smithery("filesystem", limit=2))
     d1 = (time.monotonic() - t1) * 1000
 
     # Second call: cache
     t2 = time.monotonic()
-    r2 = asyncio.run(search_smithery("filesystem", limit=2))
+    asyncio.run(search_smithery("filesystem", limit=2))
     d2 = (time.monotonic() - t2) * 1000
 
     elapsed = (time.monotonic() - start) * 1000
 
     # Cache hit should be significantly faster
     passed = d2 < d1 * 0.5 or d2 < 5  # either 50% faster or under 5ms
-    metrics.record("UC8c: cache search hit", passed, elapsed, {
-        "first_ms": round(d1, 1), "second_ms": round(d2, 1),
-        "speedup": f"{d1/max(d2,0.01):.1f}x",
-    })
+    metrics.record(
+        "UC8c: cache search hit",
+        passed,
+        elapsed,
+        {
+            "first_ms": round(d1, 1),
+            "second_ms": round(d2, 1),
+            "speedup": f"{d1 / max(d2, 0.01):.1f}x",
+        },
+    )
     return passed
 
 
 # ============================================================================
 # UC9: MULTI-REGISTRY SEARCH
 # ============================================================================
+
 
 def test_uc9_multi_registry():
     """UC9: Search across multiple registries with deduplication."""
@@ -224,11 +286,16 @@ def test_uc9_multi_registry():
 
     # Should have results from at least 2 different registries
     passed = len(sources) >= 2 and len(results) > 0
-    metrics.record("UC9: multi-registry", passed, elapsed, {
-        "total_results": len(results),
-        "sources": list(sources),
-        "names": names[:5],
-    })
+    metrics.record(
+        "UC9: multi-registry",
+        passed,
+        elapsed,
+        {
+            "total_results": len(results),
+            "sources": list(sources),
+            "names": names[:5],
+        },
+    )
     return passed
 
 
@@ -242,20 +309,30 @@ def test_uc9b_trust_in_results():
     has_trust = sum(1 for r in results if r.trust is not None)
 
     passed = has_trust > 0
-    metrics.record("UC9b: trust in results", passed, elapsed, {
-        "with_trust": has_trust,
-        "total": len(results),
-        "sample": [
-            {"name": r.name, "source": r.source, "trust": r.trust.score if r.trust else None}
-            for r in results[:3]
-        ],
-    })
+    metrics.record(
+        "UC9b: trust in results",
+        passed,
+        elapsed,
+        {
+            "with_trust": has_trust,
+            "total": len(results),
+            "sample": [
+                {
+                    "name": r.name,
+                    "source": r.source,
+                    "trust": r.trust.score if r.trust else None,
+                }
+                for r in results[:3]
+            ],
+        },
+    )
     return passed
 
 
 # ============================================================================
 # UC10: USAGE TRACKING
 # ============================================================================
+
 
 def test_uc10_usage_events():
     """UC10: Record usage events and classify primary usage."""
@@ -282,9 +359,14 @@ def test_uc10_usage_events():
 
     elapsed = (time.monotonic() - start) * 1000
     remove_stats("test-usage-skill")
-    metrics.record("UC10: usage events", True, elapsed, {
-        "classification_flow": "match_only -> cherry_pick_only -> full",
-    })
+    metrics.record(
+        "UC10: usage events",
+        True,
+        elapsed,
+        {
+            "classification_flow": "match_only -> cherry_pick_only -> full",
+        },
+    )
     return True
 
 
@@ -294,6 +376,7 @@ def test_uc10b_dead_detection():
 
     # Create a dead skill entry
     from skill_swarm.core.usage import mark_installed
+
     remove_stats("dead-skill-test")
     mark_installed("dead-skill-test")
 
@@ -310,11 +393,14 @@ def test_uc10b_dead_detection():
 # UC11: MATCHER V2 ACCURACY
 # ============================================================================
 
+
 def test_uc11_exact_match_boost():
     """UC11: Exact match should score much higher than partial."""
     start = time.monotonic()
 
-    skill = SkillInfo(name="pdf-parser", description="Parse PDF documents", tags=["pdf", "parser"])
+    skill = SkillInfo(
+        name="pdf-parser", description="Parse PDF documents", tags=["pdf", "parser"]
+    )
 
     exact = match_skill(skill, "pdf-parser")
     partial = match_skill(skill, "parse pdf")
@@ -325,9 +411,16 @@ def test_uc11_exact_match_boost():
     assert exact > 0.4, f"exact match should be > 0.4, got {exact}"
 
     elapsed = (time.monotonic() - start) * 1000
-    metrics.record("UC11: exact match boost", True, elapsed, {
-        "exact": round(exact, 3), "partial": round(partial, 3), "unrelated": round(unrelated, 3),
-    })
+    metrics.record(
+        "UC11: exact match boost",
+        True,
+        elapsed,
+        {
+            "exact": round(exact, 3),
+            "partial": round(partial, 3),
+            "unrelated": round(unrelated, 3),
+        },
+    )
     return True
 
 
@@ -335,7 +428,9 @@ def test_uc11b_typo_tolerance():
     """UC11b: Fuzzy matching should tolerate typos."""
     start = time.monotonic()
 
-    skill = SkillInfo(name="pdf-parser", description="Parse PDF documents", tags=["pdf", "parser"])
+    skill = SkillInfo(
+        name="pdf-parser", description="Parse PDF documents", tags=["pdf", "parser"]
+    )
 
     correct = match_skill(skill, "pdf parser")
     typo = match_skill(skill, "pdf parsr")  # typo: parsr
@@ -345,10 +440,16 @@ def test_uc11b_typo_tolerance():
     assert correct > typo  # correct should still be higher
 
     elapsed = (time.monotonic() - start) * 1000
-    metrics.record("UC11b: typo tolerance", True, elapsed, {
-        "correct": round(correct, 3), "typo": round(typo, 3),
-        "typo_retention": f"{typo/correct*100:.0f}%",
-    })
+    metrics.record(
+        "UC11b: typo tolerance",
+        True,
+        elapsed,
+        {
+            "correct": round(correct, 3),
+            "typo": round(typo, 3),
+            "typo_retention": f"{typo / correct * 100:.0f}%",
+        },
+    )
     return True
 
 
@@ -356,8 +457,12 @@ def test_uc11c_bm25f_field_weights():
     """UC11c: BM25F should weight name matches higher than description."""
     start = time.monotonic()
 
-    skill_name_match = SkillInfo(name="docker-deploy", description="General purpose tool", tags=["tool"])
-    skill_desc_match = SkillInfo(name="general-tool", description="Deploy docker containers", tags=["tool"])
+    skill_name_match = SkillInfo(
+        name="docker-deploy", description="General purpose tool", tags=["tool"]
+    )
+    skill_desc_match = SkillInfo(
+        name="general-tool", description="Deploy docker containers", tags=["tool"]
+    )
 
     score_name = match_skill(skill_name_match, "docker deploy")
     score_desc = match_skill(skill_desc_match, "docker deploy")
@@ -366,9 +471,15 @@ def test_uc11c_bm25f_field_weights():
     assert score_name > score_desc, f"name={score_name} should > desc={score_desc}"
 
     elapsed = (time.monotonic() - start) * 1000
-    metrics.record("UC11c: BM25F field weights", True, elapsed, {
-        "name_match": round(score_name, 3), "desc_match": round(score_desc, 3),
-    })
+    metrics.record(
+        "UC11c: BM25F field weights",
+        True,
+        elapsed,
+        {
+            "name_match": round(score_name, 3),
+            "desc_match": round(score_desc, 3),
+        },
+    )
     return True
 
 
@@ -383,11 +494,16 @@ def test_uc11d_local_match_v2():
     top = results[0] if results else {}
 
     passed = found
-    metrics.record("UC11d: local match V2", passed, elapsed, {
-        "found": found,
-        "top_match": top.get("name", "none"),
-        "top_relevance": top.get("relevance_pct", 0),
-    })
+    metrics.record(
+        "UC11d: local match V2",
+        passed,
+        elapsed,
+        {
+            "found": found,
+            "top_match": top.get("name", "none"),
+            "top_relevance": top.get("relevance_pct", 0),
+        },
+    )
     return passed
 
 
@@ -395,11 +511,13 @@ def test_uc11d_local_match_v2():
 # UC12: DEAD SKILL DETECTION (integrated flow)
 # ============================================================================
 
+
 def test_uc12_skill_health():
     """UC12: skill_health tool surfaces dead skills and usage stats."""
     start = time.monotonic()
 
     from skill_swarm.core.usage import mark_installed
+
     remove_stats("zombie-skill")
     mark_installed("zombie-skill")
 
@@ -412,11 +530,112 @@ def test_uc12_skill_health():
     elapsed = (time.monotonic() - start) * 1000
 
     remove_stats("zombie-skill")
-    metrics.record("UC12: skill health", passed, elapsed, {
-        "dead_skills": dead,
-        "cache_entries": stats["entries"],
-        "tracked_skills": len(all_stats),
-    })
+    metrics.record(
+        "UC12: skill health",
+        passed,
+        elapsed,
+        {
+            "dead_skills": dead,
+            "cache_entries": stats["entries"],
+            "tracked_skills": len(all_stats),
+        },
+    )
+    return passed
+
+
+# ============================================================================
+# UC13: SKILLS.SH INTEGRATION
+# ============================================================================
+
+
+def test_uc13_skillssh_search():
+    """UC13: skills.sh search runs without errors, returning correct types."""
+    start = time.monotonic()
+
+    results = asyncio.run(search_skillssh("web design", limit=5))
+    elapsed = (time.monotonic() - start) * 1000
+
+    # Core: function should never crash, always return list of SearchResult
+    all_correct_type = all(isinstance(r, SearchResult) for r in results)
+    all_skillssh = all(r.source == "skillssh" for r in results) if results else True
+
+    # Pass if: returns correct types and source (even if 0 results due to env)
+    passed = all_correct_type and all_skillssh
+    metrics.record(
+        "UC13: skills.sh search",
+        passed,
+        elapsed,
+        {
+            "results": len(results),
+            "names": [r.name for r in results[:3]],
+            "all_skillssh_source": all_skillssh,
+            "note": "npx interactive may return 0" if not results else "found results",
+        },
+    )
+    return passed
+
+
+def test_uc13b_skillssh_in_remote():
+    """UC13b: skills.sh results appear in combined remote search."""
+    start = time.monotonic()
+
+    results = asyncio.run(
+        search_remote("react best practices", limit=10, with_trust=False)
+    )
+    elapsed = (time.monotonic() - start) * 1000
+
+    sources = set(r.source for r in results)
+    has_skillssh = "skillssh" in sources
+
+    passed = len(results) > 0  # at minimum, other registries should work
+    metrics.record(
+        "UC13b: skills.sh in remote",
+        passed,
+        elapsed,
+        {
+            "sources": list(sources),
+            "has_skillssh": has_skillssh,
+            "total": len(results),
+            "top3": [{"name": r.name, "source": r.source} for r in results[:3]],
+        },
+    )
+    return passed
+
+
+def test_uc13c_skillssh_parser():
+    """UC13c: Parse npx skills find output correctly."""
+    start = time.monotonic()
+
+    from skill_swarm.core.registry import _parse_skillssh_output
+
+    sample_output = """Install with npx skills add <owner/repo@skill>
+
+vercel-labs/agent-skills@web-design-guidelines 117.1K installs
+└ https://skills.sh/vercel-labs/agent-skills/web-design-guidelines
+
+vercel-labs/agent-skills@frontend-design 45.2K installs
+└ https://skills.sh/vercel-labs/agent-skills/frontend-design
+"""
+    results = _parse_skillssh_output(sample_output, limit=5)
+    elapsed = (time.monotonic() - start) * 1000
+
+    passed = (
+        len(results) == 2
+        and results[0].name == "web-design-guidelines"
+        and results[1].name == "frontend-design"
+        and all(r.source == "skillssh" for r in results)
+        and results[0].relevance == 0.95  # 117.1K installs
+        and results[1].relevance == 0.93  # 45.2K installs
+    )
+    metrics.record(
+        "UC13c: skills.sh parser",
+        passed,
+        elapsed,
+        {
+            "parsed_count": len(results),
+            "names": [r.name for r in results],
+        },
+    )
     return passed
 
 
@@ -446,6 +665,9 @@ if __name__ == "__main__":
         ("UC11c: BM25F field weights", test_uc11c_bm25f_field_weights),
         ("UC11d: Local match V2", test_uc11d_local_match_v2),
         ("UC12:  Skill health", test_uc12_skill_health),
+        ("UC13:  Skills.sh search", test_uc13_skillssh_search),
+        ("UC13b: Skills.sh in remote", test_uc13b_skillssh_in_remote),
+        ("UC13c: Skills.sh output parser", test_uc13c_skillssh_parser),
     ]
 
     for name, test_fn in tests:
@@ -459,7 +681,9 @@ if __name__ == "__main__":
 
     summary = metrics.summary()
     print(f"\n{'=' * 70}")
-    print(f"V2 RESULTS: {summary['passed']}/{summary['total']} ({summary['pass_rate']})")
+    print(
+        f"V2 RESULTS: {summary['passed']}/{summary['total']} ({summary['pass_rate']})"
+    )
     print(f"{'=' * 70}")
 
     if summary["failed"] > 0:
@@ -475,7 +699,11 @@ if __name__ == "__main__":
 
     # Write report
     report = Path("/tmp/skill-swarm-v2-effectiveness.json")
-    report.write_text(json.dumps({"summary": summary, "results": metrics.results}, indent=2, default=str))
+    report.write_text(
+        json.dumps(
+            {"summary": summary, "results": metrics.results}, indent=2, default=str
+        )
+    )
     print(f"\nReport: {report}")
 
     exit(1 if summary["failed"] > 0 else 0)

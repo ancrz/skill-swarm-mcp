@@ -5,7 +5,6 @@ instead of loading the entire skill into context.
 """
 
 import re
-from pathlib import Path
 
 from skill_swarm.config import settings
 from skill_swarm.core.usage import record_event

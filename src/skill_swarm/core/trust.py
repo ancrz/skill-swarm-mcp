@@ -18,10 +18,19 @@ logger = logging.getLogger("skill-swarm.trust")
 
 # License trust levels for skill installation
 _LICENSE_TRUST: dict[str, float] = {
-    "MIT": 1.0, "Apache-2.0": 1.0, "BSD-2-Clause": 1.0,
-    "BSD-3-Clause": 1.0, "ISC": 1.0, "0BSD": 1.0, "Unlicense": 0.9,
-    "MPL-2.0": 0.85, "LGPL-2.1": 0.7, "LGPL-3.0": 0.7,
-    "GPL-2.0": 0.5, "GPL-3.0": 0.5, "AGPL-3.0": 0.4,
+    "MIT": 1.0,
+    "Apache-2.0": 1.0,
+    "BSD-2-Clause": 1.0,
+    "BSD-3-Clause": 1.0,
+    "ISC": 1.0,
+    "0BSD": 1.0,
+    "Unlicense": 0.9,
+    "MPL-2.0": 0.85,
+    "LGPL-2.1": 0.7,
+    "LGPL-3.0": 0.7,
+    "GPL-2.0": 0.5,
+    "GPL-3.0": 0.5,
+    "AGPL-3.0": 0.4,
 }
 
 # Dimension weights
@@ -198,7 +207,9 @@ async def evaluate_github_repo(repo_url: str) -> TrustScore:
         # Cache the result
         set_cached("trust", repo_url, payload=result.model_dump())
 
-        logger.info("Trust score for %s: %.3f (%s)", owner_repo, result.score, result.verdict)
+        logger.info(
+            "Trust score for %s: %.3f (%s)", owner_repo, result.score, result.verdict
+        )
         return result
 
     except Exception as e:
@@ -212,6 +223,7 @@ def quick_trust_from_registry(source: str, **kwargs) -> TrustScore:
     Uses base trust level of the source + available metadata.
     """
     base_trust = {
+        "skillssh": 0.90,
         "mcp_registry": 0.85,
         "smithery": 0.70,
         "glama": 0.65,

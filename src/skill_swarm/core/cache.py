@@ -4,7 +4,6 @@ import hashlib
 import json
 import logging
 import time
-from pathlib import Path
 
 from skill_swarm.config import settings
 

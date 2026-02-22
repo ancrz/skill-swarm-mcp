@@ -40,6 +40,12 @@ class Settings(BaseSettings):
     cache_search_ttl: int = 3600  # 1 hour for search results
     cache_trust_ttl: int = 86400  # 24 hours for trust scores
 
+    # Skills.sh (Vercel) settings — primary registry
+    skillssh_enabled: bool = True
+    skillssh_npx_path: str = "npx"
+    skillssh_github_fallback: bool = True  # GitHub topic search when npx unavailable
+    skillssh_search_timeout: float = 30.0  # npx can be slow on first run
+
     model_config = {"env_prefix": "SKILL_SWARM_", "env_file": ".env", "env_file_encoding": "utf-8"}
 
     @property

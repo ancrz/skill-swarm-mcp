@@ -1,6 +1,5 @@
 """Core tests for skill-swarm: scanner, matcher, installer, cherry-pick."""
 
-import asyncio
 import json
 import tempfile
 from pathlib import Path
@@ -9,8 +8,8 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from skill_swarm.core.scanner import scan_skill
-from skill_swarm.core.matcher import match_skill, match_skills_local, _parse_skill_file
-from skill_swarm.core.installer import load_manifest, save_manifest, _create_symlinks
+from skill_swarm.core.matcher import match_skill, _parse_skill_file
+from skill_swarm.core.installer import _create_symlinks
 from skill_swarm.tools.cherry_pick import cherry_pick_context, _parse_sections
 from skill_swarm.models import SkillInfo, SkillManifest
 from skill_swarm.config import settings
@@ -128,7 +127,7 @@ def test_manifest_roundtrip():
     restored = SkillManifest.model_validate(data)
     assert restored.skills["test"].name == "test"
     assert restored.skills["test"].tags == ["test"]
-    print(f"  PASS: manifest roundtrip OK")
+    print("  PASS: manifest roundtrip OK")
 
 
 def test_create_symlinks():
@@ -153,7 +152,7 @@ def test_create_symlinks():
             link = agent_dir / "test-skill"
             assert link.is_symlink()
             assert (link / "skill.md").exists()
-            print(f"  PASS: symlink created and resolves correctly")
+            print("  PASS: symlink created and resolves correctly")
         finally:
             settings.agent_dirs = original
 

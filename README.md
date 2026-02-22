@@ -22,7 +22,7 @@ AI agents (Claude, Gemini, Copilot) need skills to be effective. Today, finding 
 3. Install and configure it by hand
 4. Repeat for every project
 
-**Skill Swarm automates the entire pipeline.** The agent asks "I need to parse PDFs" and Skill Swarm searches 4 registries, evaluates trust, installs the best match, and makes it available instantly.
+**Skill Swarm automates the entire pipeline.** The agent asks "I need to parse PDFs" and Skill Swarm searches 5 registries (Skills.sh, MCP Registry, Smithery, Glama, GitHub), evaluates trust, installs the best match, and makes it available instantly.
 
 ---
 
@@ -33,7 +33,7 @@ flowchart TD
     A["🤖 Agent asks:<br/>'I need database access'"] --> B{match_skills}
     B -->|Local skill found| C["✅ Use it"]
     B -->|No match| D[search_skills]
-    D --> E["4 registries<br/>in parallel"]
+    D --> E["5 registries<br/>in parallel"]
     E --> F[install_skill]
     F --> G["download"]
     G --> H["security scan"]
@@ -253,13 +253,13 @@ SKILL_SWARM_GITHUB_TOKEN=ghp_your_token_here
 
 #### Quick Comparison
 
-| | Claude Code | Gemini CLI | Antigravity |
-|---|---|---|---|
-| **Config file** | `~/.claude.json` or `.mcp.json` | `~/.gemini/settings.json` | `~/.gemini/antigravity/mcp_config.json` |
-| **Transport** | `"type": "stdio"` (explicit) | Inferred from `command` | Inferred from `command` |
-| **`env` in JSON** | Yes | Yes (with `$VAR` substitution) | Possible but prefer `.env` file |
-| **`type` field** | Supported | Omit (inferred) | Not used |
-| **Secrets method** | `env` block in JSON | `env` block in JSON | `.env` file on disk |
+|                    | Claude Code                     | Gemini CLI                     | Antigravity                             |
+| ------------------ | ------------------------------- | ------------------------------ | --------------------------------------- |
+| **Config file**    | `~/.claude.json` or `.mcp.json` | `~/.gemini/settings.json`      | `~/.gemini/antigravity/mcp_config.json` |
+| **Transport**      | `"type": "stdio"` (explicit)    | Inferred from `command`        | Inferred from `command`                 |
+| **`env` in JSON**  | Yes                             | Yes (with `$VAR` substitution) | Possible but prefer `.env` file         |
+| **`type` field**   | Supported                       | Omit (inferred)                | Not used                                |
+| **Secrets method** | `env` block in JSON             | `env` block in JSON            | `.env` file on disk                     |
 
 ### Verify
 
@@ -276,16 +276,16 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}
 
 ## 8 Tools Reference
 
-| Tool | Description | Key Args |
-|------|-------------|----------|
-| **search_skills** | Search 4 registries with trust scoring | `query`, `scope`, `limit` |
-| **match_skills** | BM25F + 7-signal local matching | `task_description`, `threshold` |
-| **install_skill** | Download, scan, trust-check, install | `name`, `source`, `agents` |
-| **uninstall_skill** | Remove skill + symlinks + tracking | `name` |
-| **list_skills** | Inventory with health and usage stats | `agent` |
-| **get_skill_info** | Full metadata + content of a skill | `name` |
-| **cherry_pick_context** | Extract specific markdown sections | `skill_name`, `sections` |
-| **skill_health** | Usage analytics and dead skill detection | *(none)* |
+| Tool                    | Description                              | Key Args                        |
+| ----------------------- | ---------------------------------------- | ------------------------------- |
+| **search_skills**       | Search 5 registries with trust scoring   | `query`, `scope`, `limit`       |
+| **match_skills**        | BM25F + 7-signal local matching          | `task_description`, `threshold` |
+| **install_skill**       | Download, scan, trust-check, install     | `name`, `source`, `agents`      |
+| **uninstall_skill**     | Remove skill + symlinks + tracking       | `name`                          |
+| **list_skills**         | Inventory with health and usage stats    | `agent`                         |
+| **get_skill_info**      | Full metadata + content of a skill       | `name`                          |
+| **cherry_pick_context** | Extract specific markdown sections       | `skill_name`, `sections`        |
+| **skill_health**        | Usage analytics and dead skill detection | _(none)_                        |
 
 See [TOOLS.md](TOOLS.md) for complete parameter reference and examples.
 
@@ -332,22 +332,22 @@ pie title Trust Score Weights
     "Completeness" : 10
 ```
 
-| Dimension | Weight | Signals |
-|-----------|--------|---------|
-| **Recency** | 0.20 | Exponential decay since last push (half-life: 180 days) |
-| **Popularity** | 0.20 | Log-normalized stars, forks, watchers |
-| **Maintenance** | 0.25 | Push frequency, open issues ratio |
-| **Security** | 0.25 | License trust level (MIT=1.0, GPL=0.5, none=0.1), archived penalty |
-| **Completeness** | 0.10 | Description, homepage, topics, README presence |
+| Dimension        | Weight | Signals                                                            |
+| ---------------- | ------ | ------------------------------------------------------------------ |
+| **Recency**      | 0.20   | Exponential decay since last push (half-life: 180 days)            |
+| **Popularity**   | 0.20   | Log-normalized stars, forks, watchers                              |
+| **Maintenance**  | 0.25   | Push frequency, open issues ratio                                  |
+| **Security**     | 0.25   | License trust level (MIT=1.0, GPL=0.5, none=0.1), archived penalty |
+| **Completeness** | 0.10   | Description, homepage, topics, README presence                     |
 
 **Verdicts:**
 
-| Score | Verdict | Action |
-|-------|---------|--------|
-| >= 0.75 | **TRUST** | Safe to auto-install |
-| 0.50-0.74 | **CAUTION** | Show to agent for review |
+| Score     | Verdict     | Action                    |
+| --------- | ----------- | ------------------------- |
+| >= 0.75   | **TRUST**   | Safe to auto-install      |
+| 0.50-0.74 | **CAUTION** | Show to agent for review  |
 | 0.25-0.49 | **WARNING** | Manual review recommended |
-| < 0.25 | **REJECT** | Block installation |
+| < 0.25    | **REJECT**  | Block installation        |
 
 ---
 
@@ -380,15 +380,15 @@ graph LR
     style B fill:#3B82F6,stroke:#2563EB,color:#fff
 ```
 
-| Signal | Weight | Description |
-|--------|--------|-------------|
-| Exact match | 30 | Query equals skill name |
-| Prefix match | 20 | Skill name starts with query |
-| Phrase match | 15 | Query found as substring in any field |
-| BM25F | 15 | Field-weighted relevance (name=3x, tags=2x, desc=1x) |
-| Jaccard tags | 10 | Set similarity on tags |
-| Fuzzy name | 7 | Typo-tolerant name matching (rapidfuzz) |
-| Fuzzy description | 3 | Partial match on description |
+| Signal            | Weight | Description                                          |
+| ----------------- | ------ | ---------------------------------------------------- |
+| Exact match       | 30     | Query equals skill name                              |
+| Prefix match      | 20     | Skill name starts with query                         |
+| Phrase match      | 15     | Query found as substring in any field                |
+| BM25F             | 15     | Field-weighted relevance (name=3x, tags=2x, desc=1x) |
+| Jaccard tags      | 10     | Set similarity on tags                               |
+| Fuzzy name        | 7      | Typo-tolerant name matching (rapidfuzz)              |
+| Fuzzy description | 3      | Partial match on description                         |
 
 BM25F parameters optimized for small corpus (10-100 skills): k1=1.2, b=0.3.
 
@@ -396,25 +396,26 @@ BM25F parameters optimized for small corpus (10-100 skills): k1=1.2, b=0.3.
 
 ## Platform Support
 
-| Platform | Status | Notes |
-|----------|--------|-------|
-| **Linux** | Full support | Primary development platform |
-| **macOS** | Full support | Same Python ecosystem |
+| Platform    | Status       | Notes                                 |
+| ----------- | ------------ | ------------------------------------- |
+| **Linux**   | Full support | Primary development platform          |
+| **macOS**   | Full support | Same Python ecosystem                 |
 | **Windows** | Full support | Native symlinks supported (see below) |
 
 ### Windows Symlinks
 
 Skill Swarm uses directory symlinks (`os.symlink`) to share skills across agents. Windows supports native NTFS symlinks:
 
-| Windows Version | Requirement |
-|----------------|-------------|
-| **Windows 11** | No configuration needed — symlinks work for all users |
+| Windows Version                   | Requirement                                                              |
+| --------------------------------- | ------------------------------------------------------------------------ |
+| **Windows 11**                    | No configuration needed — symlinks work for all users                    |
 | **Windows 10** (Creators Update+) | Enable **Developer Mode**: Settings → Update & Security → For Developers |
-| **Windows 10** (older builds) | Run as Administrator |
+| **Windows 10** (older builds)     | Run as Administrator                                                     |
 
 Python's `os.symlink()` works natively on Windows when the above permissions are met. No WSL required.
 
 **Manual creation** (if needed):
+
 ```powershell
 # PowerShell
 New-Item -ItemType SymbolicLink -Path "$HOME\.claude\skills\my-skill" -Target "$HOME\.agent\skills\my-skill"
@@ -425,11 +426,11 @@ mklink /D "%USERPROFILE%\.claude\skills\my-skill" "%USERPROFILE%\.agent\skills\m
 
 **AI Agent Compatibility:**
 
-| Agent | Integration | Symlink Dir |
-|-------|------------|-------------|
-| **Claude Code** | MCP stdio | `~/.claude/skills/` |
-| **Gemini** | MCP stdio | `~/.gemini/skills/` |
-| **Custom agents** | Add to `agent_dirs` in config | Configurable |
+| Agent             | Integration                   | Symlink Dir         |
+| ----------------- | ----------------------------- | ------------------- |
+| **Claude Code**   | MCP stdio                     | `~/.claude/skills/` |
+| **Gemini**        | MCP stdio                     | `~/.gemini/skills/` |
+| **Custom agents** | Add to `agent_dirs` in config | Configurable        |
 
 ---
 
@@ -437,14 +438,18 @@ mklink /D "%USERPROFILE%\.claude\skills\my-skill" "%USERPROFILE%\.agent\skills\m
 
 All settings are loaded from environment variables (prefix: `SKILL_SWARM_`):
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `SKILL_SWARM_GITHUB_TOKEN` | *(empty)* | GitHub PAT for API access (5000 req/hr) |
-| `SKILL_SWARM_CACHE_SEARCH_TTL` | `3600` | Search cache TTL in seconds |
-| `SKILL_SWARM_CACHE_TRUST_TTL` | `86400` | Trust score cache TTL in seconds |
-| `SKILL_SWARM_SEARCH_TIMEOUT` | `15.0` | HTTP timeout for registry queries |
-| `SKILL_SWARM_SEARCH_MAX_RESULTS` | `10` | Max results per search |
-| `SKILL_SWARM_SECURITY_THRESHOLD` | `0.5` | Min security scan score to install |
+| Variable                               | Default   | Description                                  |
+| -------------------------------------- | --------- | -------------------------------------------- |
+| `SKILL_SWARM_GITHUB_TOKEN`             | _(empty)_ | GitHub PAT for API access (5000 req/hr)      |
+| `SKILL_SWARM_CACHE_SEARCH_TTL`         | `3600`    | Search cache TTL in seconds                  |
+| `SKILL_SWARM_CACHE_TRUST_TTL`          | `86400`   | Trust score cache TTL in seconds             |
+| `SKILL_SWARM_SEARCH_TIMEOUT`           | `15.0`    | HTTP timeout for registry queries            |
+| `SKILL_SWARM_SEARCH_MAX_RESULTS`       | `10`      | Max results per search                       |
+| `SKILL_SWARM_SECURITY_THRESHOLD`       | `0.5`     | Min security scan score to install           |
+| `SKILL_SWARM_SKILLSSH_ENABLED`         | `true`    | Enable Skills.sh as primary registry         |
+| `SKILL_SWARM_SKILLSSH_NPX_PATH`        | `npx`     | Path to npx binary for `skills find`         |
+| `SKILL_SWARM_SKILLSSH_GITHUB_FALLBACK` | `true`    | Use GitHub topic search when npx unavailable |
+| `SKILL_SWARM_SKILLSSH_SEARCH_TIMEOUT`  | `30.0`    | Timeout for npx subprocess calls             |
 
 ---
 
@@ -460,7 +465,7 @@ skill-swarm/
 │   │   ├── scanner.py         # Security pattern scanner
 │   │   ├── matcher.py         # BM25F + multi-signal scoring
 │   │   ├── installer.py       # Download, scan, install pipeline
-│   │   ├── registry.py        # 4-registry parallel search
+│   │   ├── registry.py        # 5-registry parallel search (Skills.sh primary)
 │   │   ├── trust.py           # Git-quality trust scoring engine
 │   │   ├── cache.py           # TTL file-based cache
 │   │   └── usage.py           # Skill usage tracking

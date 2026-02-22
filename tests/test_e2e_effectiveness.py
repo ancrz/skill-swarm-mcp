@@ -20,13 +20,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from skill_swarm.config import settings
 from skill_swarm.core.installer import load_manifest, save_manifest, install_skill, uninstall_skill
-from skill_swarm.core.matcher import match_skill, match_skills_local
 from skill_swarm.core.scanner import scan_skill
-from skill_swarm.core.registry import search_smithery, search_github, search_remote
-from skill_swarm.tools.cherry_pick import cherry_pick_context, _parse_sections
+from skill_swarm.core.registry import search_smithery, search_github
+from skill_swarm.tools.cherry_pick import cherry_pick_context
 from skill_swarm.tools.inventory import list_skills, match_skills, get_skill_info
 from skill_swarm.tools.search import search_skills
-from skill_swarm.models import SkillInfo
 
 # ============================================================================
 # METRICS COLLECTOR
@@ -284,7 +282,7 @@ def test_uc3c_install_malicious_blocked():
     manifest.skills.pop("evil-skill", None)
     save_manifest(manifest)
 
-    tmp_skill = Path("/tmp/evil-skill.py")
+    Path("/tmp/evil-skill.py")
     tmp_dir = Path("/tmp/evil-skill-src")
     tmp_dir.mkdir(exist_ok=True)
 
@@ -545,7 +543,7 @@ def test_uc6_scanner_patterns():
                 all_passed = False
 
     start = time.monotonic()
-    elapsed = (time.monotonic() - start) * 1000
+    (time.monotonic() - start) * 1000
 
     correct_count = sum(1 for r in results if r["correct"])
     total = len(results)
@@ -623,19 +621,19 @@ if __name__ == "__main__":
     print(f"Avg duration:    {summary['avg_duration_ms']} ms")
 
     if summary['failures']:
-        print(f"\n--- FAILURES ---")
+        print("\n--- FAILURES ---")
         for f in summary['failures']:
             print(f"  {f['test']}: {f['details'].get('verdict', 'UNKNOWN')}")
             if 'errors' in f['details']:
                 print(f"    errors: {f['details']['errors']}")
 
-    print(f"\n--- DETAILED METRICS ---")
+    print("\n--- DETAILED METRICS ---")
     for r in metrics.results:
         status = "✓" if r['passed'] else "✗"
         verdict = r['details'].get('verdict', '')
         print(f"  {status} {r['test']:<45} {r['duration_ms']:>8.1f}ms  {verdict}")
 
-    print(f"\n--- FINE-TUNING RECOMMENDATIONS ---")
+    print("\n--- FINE-TUNING RECOMMENDATIONS ---")
 
     # Analyze effectiveness
     search_tests = [r for r in metrics.results if "search" in r['test'].lower() or "UC2" in r['test']]

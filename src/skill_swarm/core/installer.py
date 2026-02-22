@@ -4,6 +4,7 @@ import asyncio
 import io
 import json
 import logging
+import re
 import shutil
 import tempfile
 import zipfile
@@ -98,7 +99,9 @@ async def install_skill(
             # Step 2: Security scan
             scan_result = scan_skill(temp_dir, name)
             if not scan_result.passed:
-                logger.warning("Security scan BLOCKED '%s': %s", name, scan_result.findings)
+                logger.warning(
+                    "Security scan BLOCKED '%s': %s", name, scan_result.findings
+                )
                 return InstallResult(
                     skill_name=name,
                     success=False,
@@ -136,7 +139,9 @@ async def install_skill(
             )
             save_manifest(manifest)
 
-            logger.info("Installed '%s' → %s (linked to: %s)", name, final_path, linked_agents)
+            logger.info(
+                "Installed '%s' → %s (linked to: %s)", name, final_path, linked_agents
+            )
 
             return InstallResult(
                 skill_name=name,
@@ -162,7 +167,6 @@ async def install_skill(
 
 async def uninstall_skill(name: str) -> InstallResult:
     """Remove a skill and its symlinks from all agents."""
-    skill_filename = f"{name}.skill.md"
     skill_dir = settings.skill_dir(name)
     skill_path = settings.skill_path(name)
 
@@ -222,7 +226,9 @@ async def _download_skill(source: str, target_file: Path, temp_dir: Path) -> boo
             logger.info("Copied local file: %s → %s", local_path, target_file)
             return True
         elif local_path.is_dir():
-            shutil.copytree(str(local_path), str(temp_dir / "source"), dirs_exist_ok=True)
+            shutil.copytree(
+                str(local_path), str(temp_dir / "source"), dirs_exist_ok=True
+            )
             return True
         else:
             logger.error("Local path not found: %s", local_path)
@@ -239,6 +245,12 @@ async def _download_skill(source: str, target_file: Path, temp_dir: Path) -> boo
     # GitHub repo URL
     if "github.com" in source:
         return await _clone_repo(source, temp_dir)
+
+    # GitHub short-ref (owner/repo) commonly returned by skills.sh
+    if re.match(r"^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$", source):
+        github_url = f"https://github.com/{source}"
+        logger.info("Expanded short-ref '%s' to '%s'", source, github_url)
+        return await _clone_repo(github_url, temp_dir)
 
     # Try as raw URL
     return await _download_file(source, target_file)
@@ -277,7 +289,12 @@ async def _clone_repo(url: str, target_dir: Path) -> bool:
     """Clone a git repository."""
     try:
         process = await asyncio.create_subprocess_exec(
-            "git", "clone", "--depth", "1", url, str(target_dir / "repo"),
+            "git",
+            "clone",
+            "--depth",
+            "1",
+            url,
+            str(target_dir / "repo"),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -322,16 +339,34 @@ def _create_symlinks(filename: str, source: Path, agents: list[str]) -> list[str
 
 
 def _find_skill_md(directory: Path) -> Path | None:
-    """Find the main skill markdown file in a directory."""
-    # Look for SKILL.md first
+    """Find the main skill markdown file in a directory.
+
+    Searches in order of preference:
+    1. SKILL.md (skills.sh standard — uppercase)
+    2. skills/ subdirectory tree (skills.sh multi-skill repos)
+    3. *.skill.md (legacy naming)
+    4. Any .md file (fallback)
+    """
+    # Direct SKILL.md in root
+    root_skill = directory / "SKILL.md"
+    if root_skill.exists():
+        return root_skill
+
+    # Recursive SKILL.md (handles skills.sh repo format: skills/{name}/SKILL.md)
     for md in directory.rglob("SKILL.md"):
         return md
     # Then any .skill.md
     for md in directory.rglob("*.skill.md"):
         return md
-    # Then any .md
+    # Then any .md (but not common non-skill files)
     for md in directory.rglob("*.md"):
-        if md.name not in {"README.md", "CHANGELOG.md", "LICENSE.md"}:
+        if md.name.upper() not in {
+            "README.MD",
+            "CHANGELOG.MD",
+            "LICENSE.MD",
+            "CONTRIBUTING.MD",
+            "CODE_OF_CONDUCT.MD",
+        }:
             return md
     return None
 
@@ -344,7 +379,9 @@ def _extract_description(skill_path: Path) -> str:
         content = skill_path.read_text(encoding="utf-8")
         fm_match = re.match(r"^---\s*\n(.*?)\n---", content, re.DOTALL)
         if fm_match:
-            desc_match = re.search(r"^description\s*:\s*(.+)$", fm_match.group(1), re.MULTILINE)
+            desc_match = re.search(
+                r"^description\s*:\s*(.+)$", fm_match.group(1), re.MULTILINE
+            )
             if desc_match:
                 val = desc_match.group(1).strip().strip("'\"")
                 return val[:200]

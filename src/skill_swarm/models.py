@@ -29,7 +29,9 @@ class SearchResult(BaseModel):
 
     name: str
     description: str = ""
-    source: str = ""  # "local", "smithery", "github", "mcp_registry", "glama"
+    source: str = (
+        ""  # "local", "skillssh", "smithery", "github", "mcp_registry", "glama"
+    )
     url: str = ""  # download or repo URL
     relevance: float = 0.0  # 0.0-1.0
     tags: list[str] = Field(default_factory=list)

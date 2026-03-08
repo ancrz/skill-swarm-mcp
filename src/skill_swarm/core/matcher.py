@@ -183,8 +183,8 @@ def match_skills_local(query: str, threshold: float = 0.3) -> list[SearchResult]
     if not skills_dir.exists():
         return []
 
-    # Parse all skill.md files (subdirectory structure: {name}/skill.md)
-    skill_files = sorted(skills_dir.glob("*/skill.md"))
+    # Parse all SKILL.md files (subdirectory structure: {name}/SKILL.md)
+    skill_files = sorted(skills_dir.glob("*/SKILL.md"))
     skills: list[SkillInfo] = []
     for sf in skill_files:
         info = _parse_skill_file(sf)
@@ -207,7 +207,7 @@ def match_skills_local(query: str, threshold: float = 0.3) -> list[SearchResult]
                 name=skill.name,
                 description=skill.description,
                 source="local",
-                url=str(skills_dir / skill.name / "skill.md"),
+                url=str(skills_dir / skill.name / "SKILL.md"),
                 relevance=round(score, 3),
                 tags=skill.tags,
             ))
@@ -217,7 +217,7 @@ def match_skills_local(query: str, threshold: float = 0.3) -> list[SearchResult]
 
 
 def _parse_skill_file(path: Path) -> SkillInfo | None:
-    """Parse YAML frontmatter from a .skill.md file."""
+    """Parse YAML frontmatter from a .SKILL.md file."""
     try:
         content = path.read_text(encoding="utf-8")
         fm_match = re.match(r"^---\s*\n(.*?)\n---", content, re.DOTALL)

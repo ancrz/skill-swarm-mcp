@@ -69,7 +69,7 @@ async def install_skill(
 
     lock = await _get_lock(name)
     async with lock:
-        skill_filename = "skill.md"
+        skill_filename = "SKILL.md"
         skill_dir = settings.skill_dir(name)
         final_path = settings.skill_path(name)
 
@@ -313,9 +313,9 @@ def _create_symlinks(filename: str, source: Path, agents: list[str]) -> list[str
     """Create symlinks from agent skill dirs to the source directory.
 
     Symlinks the entire skill directory ({name}/) so agents see:
-        ~/.claude/skills/{name}/skill.md
+        ~/.claude/skills/{name}/SKILL.md
     """
-    # source is the .skill.md file; parent is the skill directory
+    # source is the .SKILL.md file; parent is the skill directory
     skill_dir = source.parent
     skill_dir_name = skill_dir.name
 
@@ -344,7 +344,7 @@ def _find_skill_md(directory: Path) -> Path | None:
     Searches in order of preference:
     1. SKILL.md (skills.sh standard — uppercase)
     2. skills/ subdirectory tree (skills.sh multi-skill repos)
-    3. *.skill.md (legacy naming)
+    3. *.SKILL.md (legacy naming)
     4. Any .md file (fallback)
     """
     # Direct SKILL.md in root
@@ -355,8 +355,8 @@ def _find_skill_md(directory: Path) -> Path | None:
     # Recursive SKILL.md (handles skills.sh repo format: skills/{name}/SKILL.md)
     for md in directory.rglob("SKILL.md"):
         return md
-    # Then any .skill.md
-    for md in directory.rglob("*.skill.md"):
+    # Then any .SKILL.md
+    for md in directory.rglob("*.SKILL.md"):
         return md
     # Then any .md (but not common non-skill files)
     for md in directory.rglob("*.md"):

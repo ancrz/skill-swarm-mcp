@@ -27,7 +27,7 @@ def list_skills(agent: str = "all") -> dict:
                 continue
             link = agent_dir / name  # directory-level symlink
             if link.is_symlink():
-                skill_file = link / "skill.md"
+                skill_file = link / "SKILL.md"
                 if skill_file.exists():
                     symlink_status[agent_name] = "ok"
                 else:
@@ -124,7 +124,7 @@ def get_skill_info(name: str) -> dict:
     symlinks: dict[str, str] = {}
     for agent_name, agent_dir in settings.agent_dirs.items():
         link = agent_dir / name
-        if link.is_symlink() and (link / "skill.md").exists():
+        if link.is_symlink() and (link / "SKILL.md").exists():
             symlinks[agent_name] = "linked"
         elif link.exists():
             symlinks[agent_name] = "directory (not symlink)"

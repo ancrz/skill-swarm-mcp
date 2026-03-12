@@ -57,13 +57,14 @@ Skills are installed once to `~/.agent/skills/` (source of truth) and served to 
 
 ```
 ~/.agent/skills/               ← Source of truth (agent-agnostic)
-├── skill-name.skill.md
+├── {skill-name}/
+│   └── SKILL.md
 
 ~/.claude/skills/              ← Symlink for Claude
-├── skill-name.skill.md → ~/.agent/skills/skill-name.skill.md
+├── {skill-name} → ~/.agent/skills/{skill-name}
 
 ~/.gemini/skills/              ← Symlink for Gemini
-├── skill-name.skill.md → ~/.agent/skills/skill-name.skill.md
+├── {skill-name} → ~/.agent/skills/{skill-name}
 ```
 
 ### MCP Tools Available

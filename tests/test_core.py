@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from skill_swarm.core.scanner import scan_skill
 from skill_swarm.core.matcher import match_skill, _parse_skill_file
-from skill_swarm.core.installer import _create_symlinks
+from skill_swarm.core.installer import _create_symlinks, normalize_skill_filenames
 from skill_swarm.tools.cherry_pick import cherry_pick_context, _parse_sections
 from skill_swarm.models import SkillInfo, SkillManifest
 from skill_swarm.config import settings
@@ -133,10 +133,10 @@ def test_manifest_roundtrip():
 def test_create_symlinks():
     """Symlinks should be created in agent directories (directory-level)."""
     with tempfile.TemporaryDirectory() as tmp:
-        # Simulate subdirectory structure: {name}/skill.md
+        # Simulate subdirectory structure: {name}/SKILL.md
         skill_dir = Path(tmp) / "test-skill"
         skill_dir.mkdir()
-        source = skill_dir / "skill.md"
+        source = skill_dir / "SKILL.md"
         source.write_text("# Test\n")
 
         agent_dir = Path(tmp) / "agent_skills"
@@ -147,14 +147,78 @@ def test_create_symlinks():
         settings.agent_dirs["test-agent"] = agent_dir
 
         try:
-            linked = _create_symlinks("skill.md", source, ["test-agent"])
+            linked = _create_symlinks("SKILL.md", source, ["test-agent"])
             assert "test-agent" in linked
             link = agent_dir / "test-skill"
             assert link.is_symlink()
-            assert (link / "skill.md").exists()
+            assert (link / "SKILL.md").exists()
             print("  PASS: symlink created and resolves correctly")
         finally:
             settings.agent_dirs = original
+
+
+def test_normalize_skill_filenames():
+    """Migration should rename skill.md → SKILL.md and update manifest."""
+    from skill_swarm.core.installer import load_manifest, save_manifest
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+
+        # Create two skill subdirs: one lowercase (needs migration), one uppercase (already correct)
+        lowercase_dir = tmp_path / "my-skill"
+        lowercase_dir.mkdir()
+        (lowercase_dir / "skill.md").write_text("# My Skill\n")
+
+        uppercase_dir = tmp_path / "other-skill"
+        uppercase_dir.mkdir()
+        (uppercase_dir / "SKILL.md").write_text("# Other Skill\n")
+
+        # Create a manifest referencing the lowercase path
+        manifest = SkillManifest(
+            skills={
+                "my-skill": SkillInfo(
+                    name="my-skill",
+                    description="A skill with lowercase filename",
+                    source="https://example.com",
+                    installed_path=str(lowercase_dir / "skill.md"),
+                ),
+                "other-skill": SkillInfo(
+                    name="other-skill",
+                    description="A skill with uppercase filename",
+                    source="https://example.com",
+                    installed_path=str(uppercase_dir / "SKILL.md"),
+                ),
+            }
+        )
+
+        # Temporarily override settings.skills_dir so load/save_manifest use tmp
+        original_skills_dir = settings.skills_dir
+        settings.skills_dir = tmp_path
+
+        try:
+            # Write manifest to the temp dir
+            save_manifest(manifest)
+
+            # First run: should rename 1 file
+            count = normalize_skill_filenames()
+            assert count == 1, f"Expected 1 rename, got {count}"
+            assert not (lowercase_dir / "skill.md").exists(), "lowercase skill.md should be gone"
+            assert (lowercase_dir / "SKILL.md").exists(), "uppercase SKILL.md should exist"
+            assert (uppercase_dir / "SKILL.md").exists(), "other-skill should be untouched"
+
+            # Verify manifest was updated
+            updated_manifest = load_manifest()
+            assert updated_manifest.skills["my-skill"].installed_path == str(
+                lowercase_dir / "SKILL.md"
+            ), "manifest installed_path should be updated"
+
+            # Second run: idempotent — 0 renames
+            count2 = normalize_skill_filenames()
+            assert count2 == 0, f"Expected 0 renames on second call, got {count2}"
+
+            print("  PASS: migration renamed 1 file, updated manifest, idempotent on re-run")
+        finally:
+            settings.skills_dir = original_skills_dir
 
 
 if __name__ == "__main__":
@@ -171,6 +235,7 @@ if __name__ == "__main__":
         ("Cherry-pick: real file", test_cherry_pick_with_real_file),
         ("Manifest: roundtrip", test_manifest_roundtrip),
         ("Installer: symlinks", test_create_symlinks),
+        ("Installer: normalize filenames", test_normalize_skill_filenames),
     ]
 
     passed = 0

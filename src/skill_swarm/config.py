@@ -61,8 +61,8 @@ class Settings(BaseSettings):
         return self.skills_dir / name
 
     def skill_path(self, name: str) -> Path:
-        """Return the canonical path: skills_dir/{name}/skill.md"""
-        return self.skills_dir / name / "skill.md"
+        """Return the canonical path: skills_dir/{name}/SKILL.md"""
+        return self.skills_dir / name / "SKILL.md"
 
 
 settings = Settings()

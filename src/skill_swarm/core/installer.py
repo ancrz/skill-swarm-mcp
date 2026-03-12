@@ -50,6 +50,49 @@ def save_manifest(manifest: SkillManifest) -> None:
     )
 
 
+def normalize_skill_filenames() -> int:
+    """Migrate lowercase skill.md files to SKILL.md (uppercase).
+
+    Scans all subdirectories of settings.skills_dir and renames any
+    skill.md → SKILL.md where lowercase exists and uppercase does NOT.
+    Updates installed_path in manifest for affected skills.
+
+    Returns the number of files renamed. Idempotent — safe to call repeatedly.
+    """
+    skills_dir = settings.skills_dir
+    if not skills_dir.exists():
+        return 0
+
+    renames = 0
+    affected_skills: list[str] = []
+
+    for child in skills_dir.iterdir():
+        # Skip non-directories and hidden dirs (.cache, etc.)
+        if not child.is_dir() or child.name.startswith("."):
+            continue
+
+        lowercase = child / "skill.md"
+        uppercase = child / "SKILL.md"
+
+        if lowercase.exists() and not uppercase.exists():
+            lowercase.rename(uppercase)
+            renames += 1
+            affected_skills.append(child.name)
+            logger.info("Renamed %s → %s", lowercase, uppercase)
+
+    # Update manifest installed_path for any renamed skills
+    if affected_skills:
+        manifest = load_manifest()
+        for skill_name in affected_skills:
+            if skill_name in manifest.skills:
+                manifest.skills[skill_name].installed_path = str(
+                    skills_dir / skill_name / "SKILL.md"
+                )
+        save_manifest(manifest)
+
+    return renames
+
+
 async def install_skill(
     name: str,
     source: str,

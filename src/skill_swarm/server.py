@@ -33,6 +33,15 @@ mcp = FastMCP(
     ),
 )
 
+# Startup migration: rename any legacy skill.md files to SKILL.md
+from skill_swarm.core.installer import normalize_skill_filenames
+
+_migrated = normalize_skill_filenames()
+if _migrated:
+    logging.getLogger("skill-swarm").info(
+        "Startup migration: renamed %d skill files to SKILL.md", _migrated
+    )
+
 
 @mcp.tool()
 async def search_skills(query: str, scope: str = "all", limit: int = 5) -> str:

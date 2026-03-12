@@ -206,7 +206,7 @@ Download, security-scan, trust-check, and install a skill globally with agent sy
 ### Pipeline
 
 ```
-download source → security scan → trust check → install to ~/.agent/skills/{name}/skill.md → symlink to agents → update manifest
+download source → security scan → trust check → install to ~/.agent/skills/{name}/SKILL.md → symlink to agents → update manifest
 ```
 
 ### Parameters
@@ -234,7 +234,7 @@ JSON `InstallResult` object:
 {
   "skill_name": "pdf-parser",
   "success": true,
-  "install_path": "/home/user/.agent/skills/pdf-parser/skill.md",
+  "install_path": "/home/user/.agent/skills/pdf-parser/SKILL.md",
   "agents_linked": ["claude", "gemini"],
   "security_score": 0.95,
   "trust_score": 0.78,
@@ -271,7 +271,7 @@ Minimum security score to allow installation: **0.5** (configurable via `SKILL_S
 ```
 ~/.agent/skills/
 └── pdf-parser/
-    └── skill.md              ← Installed file
+    └── SKILL.md              ← Installed file
 
 ~/.claude/skills/
 └── pdf-parser -> ~/.agent/skills/pdf-parser   ← Directory symlink
@@ -392,8 +392,8 @@ List all installed skills with metadata, symlink health status, usage stats, and
 
 | Status                      | Meaning                                           |
 | --------------------------- | ------------------------------------------------- |
-| `"ok"`                      | Symlink exists and resolves to a valid `skill.md` |
-| `"broken"`                  | Symlink exists but `skill.md` is missing inside   |
+| `"ok"`                      | Symlink exists and resolves to a valid `SKILL.md` |
+| `"broken"`                  | Symlink exists but `SKILL.md` is missing inside   |
 | `"directory (not symlink)"` | Path exists as a real directory, not a symlink    |
 | `"missing"`                 | No symlink or directory found for this agent      |
 
@@ -430,7 +430,7 @@ Calling this tool counts as a **full_read** in usage tracking.
 ```json
 {
   "name": "docker-ops",
-  "path": "/home/user/.agent/skills/docker-ops/skill.md",
+  "path": "/home/user/.agent/skills/docker-ops/SKILL.md",
   "size_bytes": 4523,
   "content": "---\nname: docker-ops\n...\n# Docker Operations\n...",
   "description": "Docker container management and deployment",
@@ -465,7 +465,7 @@ If the skill is not found:
 
 ```json
 {
-  "error": "Skill 'unknown-skill' not found at /home/user/.agent/skills/unknown-skill/skill.md"
+  "error": "Skill 'unknown-skill' not found at /home/user/.agent/skills/unknown-skill/SKILL.md"
 }
 ```
 
@@ -540,7 +540,7 @@ If the skill is not found:
 
 ```json
 {
-  "error": "Skill 'unknown-skill' not found at /home/user/.agent/skills/unknown-skill/skill.md"
+  "error": "Skill 'unknown-skill' not found at /home/user/.agent/skills/unknown-skill/SKILL.md"
 }
 ```
 

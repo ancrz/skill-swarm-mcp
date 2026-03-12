@@ -40,7 +40,7 @@ flowchart TD
     H --> I["trust check"]
     I --> J["install"]
     J --> K["symlink"]
-    K --> L["~/.agent/skills/{name}/skill.md"]
+    K --> L["~/.agent/skills/{name}/SKILL.md"]
     C --> M{Need partial context?}
     M -->|Yes| N[cherry_pick_context]
     M -->|No| O["📄 Full skill loaded"]
@@ -85,7 +85,7 @@ graph TB
     end
 
     subgraph Skills["~/.agent/skills/"]
-        SkillFile["{name}/skill.md"]
+        SkillFile["{name}/SKILL.md"]
         Symlinks["Symlinked to:<br/>~/.claude/skills/<br/>~/.gemini/skills/"]
     end
 
@@ -118,7 +118,7 @@ sequenceDiagram
     S->>G: GET /repos/{owner}/{repo}
     G-->>S: stars, license, pushed_at, archived
     S->>S: Compute trust score (5 dimensions)
-    S->>FS: Write ~/.agent/skills/pdf-parser/skill.md
+    S->>FS: Write ~/.agent/skills/pdf-parser/SKILL.md
     S->>FS: Symlink ~/.claude/skills/pdf-parser → source
     S->>FS: Symlink ~/.gemini/skills/pdf-parser → source
     S->>S: Update manifest.json + usage tracker
@@ -298,7 +298,7 @@ Skills follow the `.agent` standard for cross-agent compatibility:
 ```
 ~/.agent/skills/                    # Global source of truth
 ├── {skill-name}/
-│   └── skill.md                    # Skill content (always skill.md)
+│   └── SKILL.md                    # Skill content (always SKILL.md)
 ├── manifest.json                   # Installed skills registry
 ├── .usage.json                     # Usage tracking data
 └── .cache/                         # TTL-based search/trust cache
@@ -313,7 +313,7 @@ Skills follow the `.agent` standard for cross-agent compatibility:
 ```
 
 - The **folder name** identifies the skill
-- The **file** is always `skill.md` (standard compliance)
+- The **file** is always `SKILL.md` (standard compliance)
 - Agent directories contain **directory symlinks** to the global source
 - Any agent that follows the `.agent/skills/` convention can consume skills
 

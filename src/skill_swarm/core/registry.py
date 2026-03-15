@@ -13,13 +13,14 @@ import logging
 import os
 import re
 import shutil
+import time
 
 import httpx
 
 from skill_swarm.config import settings
 from skill_swarm.core.cache import get_cached, set_cached
 from skill_swarm.core.trust import evaluate_github_repo, quick_trust_from_registry
-from skill_swarm.models import SearchResult
+from skill_swarm.models import SearchMetadata, SearchResult
 
 logger = logging.getLogger("skill-swarm.registry")
 
@@ -535,6 +536,104 @@ async def search_remote(
     unique.sort(key=lambda x: x.relevance, reverse=True)
 
     return unique[:limit]
+
+
+async def search_remote_phased(
+    query: str,
+    limit: int = 5,
+    with_trust: bool = True,
+) -> tuple[list[SearchResult], SearchMetadata]:
+    """Two-phase search: high-trust registries first, fallback if insufficient.
+
+    Phase 1: Skills.sh + MCP Registry (parallel)
+    Phase 2: Smithery + Glama + GitHub (only if Phase 1 < min_results)
+
+    Returns (results, metadata). Never raises.
+    """
+    phase1_source_names = ["skillssh", "mcp_registry"]
+    phase2_source_names = ["smithery", "glama", "github"]
+
+    # ── Phase 1: High-trust registries ──
+    t0 = time.monotonic()
+    phase1_tasks = [
+        search_skillssh(query, limit),
+        search_mcp_registry(query, limit),
+    ]
+    phase1_gather = await asyncio.gather(*phase1_tasks, return_exceptions=True)
+    phase1_ms = (time.monotonic() - t0) * 1000
+
+    phase1_results: list[SearchResult] = []
+    for result_or_error in phase1_gather:
+        if isinstance(result_or_error, list):
+            phase1_results.extend(result_or_error)
+
+    # ── Phase 2: Lower-trust registries (conditional) ──
+    phase2_results: list[SearchResult] = []
+    phase2_ms = 0.0
+    phase2_triggered = len(phase1_results) < settings.search_phase1_min_results
+
+    if phase2_triggered:
+        t1 = time.monotonic()
+        phase2_tasks = [
+            search_smithery(query, limit),
+            search_glama(query, limit),
+            search_github(query, limit),
+        ]
+        phase2_gather = await asyncio.gather(*phase2_tasks, return_exceptions=True)
+        phase2_ms = (time.monotonic() - t1) * 1000
+
+        for result_or_error in phase2_gather:
+            if isinstance(result_or_error, list):
+                phase2_results.extend(result_or_error)
+
+    # ── Merge, deduplicate, trust-score (reuse existing logic) ──
+    all_results = phase1_results + phase2_results
+
+    seen: set[str] = set()
+    unique: list[SearchResult] = []
+    for r in sorted(all_results, key=lambda x: x.relevance, reverse=True):
+        norm_name = _normalize_name(r.name)
+        if r.source == "skillssh" and r.url:
+            dedup_key = f"{norm_name}:{r.url}"
+        else:
+            dedup_key = f"{norm_name}:{r.source}"
+        if dedup_key not in seen:
+            seen.add(dedup_key)
+            unique.append(r)
+
+    if with_trust:
+        for r in unique:
+            if r.url and "github.com" in r.url:
+                trust = await evaluate_github_repo(r.url)
+                r.trust = trust
+                if r.source == "skillssh":
+                    r.relevance = round(r.relevance * 0.7 + trust.score * 0.3, 3)
+                else:
+                    r.relevance = round(r.relevance * 0.4 + trust.score * 0.6, 3)
+            else:
+                r.trust = quick_trust_from_registry(r.source)
+
+    unique.sort(key=lambda x: x.relevance, reverse=True)
+    final = unique[:limit]
+
+    metadata = SearchMetadata(
+        phase1_sources=phase1_source_names,
+        phase2_sources=phase2_source_names if phase2_triggered else [],
+        phase1_results=len(phase1_results),
+        phase2_results=len(phase2_results),
+        phase1_duration_ms=round(phase1_ms, 1),
+        phase2_duration_ms=round(phase2_ms, 1),
+        total_duration_ms=round(phase1_ms + phase2_ms, 1),
+        all_failed=len(phase1_results) == 0 and len(phase2_results) == 0,
+    )
+
+    logger.info(
+        "Phased search '%s': P1=%d results (%.0fms), P2=%d results (%.0fms), total=%.0fms",
+        query[:50], len(phase1_results), phase1_ms,
+        len(phase2_results), phase2_ms, phase1_ms + phase2_ms,
+    )
+
+    return (final, metadata)
 
 
 def _normalize_name(name: str) -> str:

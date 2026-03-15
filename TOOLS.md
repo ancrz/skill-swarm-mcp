@@ -130,6 +130,20 @@ search_skills("docker deploy", scope="local")
 - Trust scores are cached for **24 hours** (configurable via `SKILL_SWARM_CACHE_TRUST_TTL`)
 - Cache is automatically purged when skills are installed or uninstalled
 
+### Search Phases (Internal)
+
+Internally, remote search uses a two-phase strategy for latency optimization:
+
+- **Phase 1:** Skills.sh + Official MCP Registry (high-trust, parallel)
+- **Phase 2:** Smithery + Glama + GitHub (triggered only when Phase 1 returns fewer than `search_phase1_min_results` results, default: 3)
+
+This is transparent to MCP consumers — the response format is unchanged. Phase metadata is logged at INFO level for observability.
+
+Configure the threshold:
+| Variable | Default | Description |
+|---|---|---|
+| `SKILL_SWARM_SEARCH_PHASE1_MIN_RESULTS` | `3` | Phase 2 triggers below this count |
+
 ---
 
 ## match_skills

@@ -1,10 +1,14 @@
 """Search tools: find skills locally and remotely."""
 
+import logging
+
 from skill_swarm.core.matcher import match_skills_local
 from skill_swarm.core.normalizer import normalize_query
-from skill_swarm.core.registry import search_remote
+from skill_swarm.core.registry import search_remote_phased
 from skill_swarm.core.usage import record_event
 from skill_swarm.models import SearchResult
+
+logger = logging.getLogger("skill-swarm.search")
 
 
 async def search_skills(
@@ -33,8 +37,17 @@ async def search_skills(
         results.extend(local)
 
     if scope in ("remote", "all"):
-        remote = await search_remote(query, limit, with_trust=True)
+        remote, metadata = await search_remote_phased(query, limit, with_trust=True)
         results.extend(remote)
+        logger.info(
+            "Search '%s': phase1=%d (%s), phase2=%d (%s), total=%.0fms",
+            query[:50],
+            metadata.phase1_results,
+            ",".join(metadata.phase1_sources),
+            metadata.phase2_results,
+            ",".join(metadata.phase2_sources) if metadata.phase2_sources else "skipped",
+            metadata.total_duration_ms,
+        )
 
     # Sort by relevance, local results tend to score higher
     results.sort(key=lambda r: r.relevance, reverse=True)

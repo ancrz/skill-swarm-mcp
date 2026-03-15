@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     # Search settings
     search_timeout: float = 15.0
     search_max_results: int = 10
+    search_phase1_min_results: int = 3  # Phase 2 triggers when Phase 1 finds fewer
 
     # Registry API URLs
     smithery_api_url: str = "https://registry.smithery.ai/servers"

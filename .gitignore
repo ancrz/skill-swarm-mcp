@@ -30,3 +30,6 @@ Thumbs.db
 
 # Docs (internal, not tracked)
 docs/
+
+# Example repos (cloned for reference, not tracked)
+/example/

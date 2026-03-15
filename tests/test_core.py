@@ -1,5 +1,6 @@
 """Core tests for skill-swarm: scanner, matcher, installer, cherry-pick."""
 
+import asyncio
 import json
 import tempfile
 from pathlib import Path
@@ -268,6 +269,66 @@ def test_normalize_query_mixed_case_whitespace():
     print(f"  PASS: mixed case/whitespace normalized to '{result}'")
 
 
+def test_search_remote_phased_returns_tuple():
+    """search_remote_phased should return (list, SearchMetadata)."""
+    import asyncio
+    from skill_swarm.core.registry import search_remote_phased
+    from skill_swarm.models import SearchMetadata
+
+    results, metadata = asyncio.run(
+        search_remote_phased("filesystem", limit=3, with_trust=False)
+    )
+    assert isinstance(results, list), f"Expected list, got {type(results)}"
+    assert isinstance(metadata, SearchMetadata), f"Expected SearchMetadata, got {type(metadata)}"
+    assert metadata.phase1_sources == ["skillssh", "mcp_registry"]
+    assert metadata.total_duration_ms >= 0
+    print(f"  PASS: returned tuple, P1={metadata.phase1_results}, P2={metadata.phase2_results}")
+
+
+def test_search_remote_phased_metadata_fields():
+    """SearchMetadata fields should be populated correctly."""
+    import asyncio
+    from skill_swarm.core.registry import search_remote_phased
+
+    _, metadata = asyncio.run(
+        search_remote_phased("python testing", limit=3, with_trust=False)
+    )
+    assert isinstance(metadata.phase1_duration_ms, float)
+    assert isinstance(metadata.phase2_duration_ms, float)
+    assert isinstance(metadata.all_failed, bool)
+    assert metadata.phase1_results >= 0
+    assert metadata.phase2_results >= 0
+    print(f"  PASS: metadata fields valid, all_failed={metadata.all_failed}")
+
+
+def test_search_skills_still_returns_list():
+    """Regression guard: search_skills must return list[SearchResult]."""
+    import asyncio
+    from skill_swarm.tools.search import search_skills
+    from skill_swarm.models import SearchResult
+
+    results = asyncio.run(search_skills("docker", scope="local", limit=3))
+    assert isinstance(results, list), f"Expected list, got {type(results)}"
+    for r in results:
+        assert isinstance(r, SearchResult), f"Expected SearchResult, got {type(r)}"
+    print(f"  PASS: search_skills returns list ({len(results)} results)")
+
+
+def test_search_remote_phased_graceful_on_nonsense():
+    """Phased search should never raise, even on gibberish queries."""
+    import asyncio
+    from skill_swarm.core.registry import search_remote_phased
+    from skill_swarm.models import SearchMetadata
+
+    results, metadata = asyncio.run(
+        search_remote_phased("zzzqqq_nonexistent_xyzzy", limit=2, with_trust=False)
+    )
+    assert isinstance(results, list)
+    assert isinstance(metadata, SearchMetadata)
+    # Should not raise regardless of results
+    print(f"  PASS: graceful on nonsense, results={len(results)}, all_failed={metadata.all_failed}")
+
+
 if __name__ == "__main__":
     print("=" * 60)
     print("skill-swarm core tests")
@@ -288,6 +349,10 @@ if __name__ == "__main__":
         ("Normalizer: all stopwords", test_normalize_query_all_stopwords),
         ("Normalizer: empty input", test_normalize_query_empty),
         ("Normalizer: mixed case/whitespace", test_normalize_query_mixed_case_whitespace),
+        ("Phased search: returns tuple", test_search_remote_phased_returns_tuple),
+        ("Phased search: metadata fields", test_search_remote_phased_metadata_fields),
+        ("Phased search: search_skills returns list", test_search_skills_still_returns_list),
+        ("Phased search: graceful on nonsense", test_search_remote_phased_graceful_on_nonsense),
     ]
 
     passed = 0

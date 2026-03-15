@@ -38,6 +38,19 @@ class SearchResult(BaseModel):
     trust: TrustScore | None = None  # None for local skills
 
 
+class SearchMetadata(BaseModel):
+    """Internal metadata from phased search orchestration."""
+
+    phase1_sources: list[str] = Field(default_factory=list)
+    phase2_sources: list[str] = Field(default_factory=list)
+    phase1_results: int = 0
+    phase2_results: int = 0
+    phase1_duration_ms: float = 0.0
+    phase2_duration_ms: float = 0.0
+    total_duration_ms: float = 0.0
+    all_failed: bool = False
+
+
 class InstallResult(BaseModel):
     """Result of a skill installation."""
 

@@ -54,6 +54,25 @@ flowchart TD
     style N fill:#F59E0B,stroke:#D97706,color:#fff
 ```
 
+### Search Orchestration
+
+Remote search uses a two-phase strategy — high-trust registries first, fallback only if needed:
+
+```mermaid
+flowchart LR
+    Q["Query"] --> P1["Phase 1<br/>Skills.sh + MCP Registry"]
+    P1 -->|">= 3 results"| D["Deduplicate<br/>+ Trust Score"]
+    P1 -->|"< 3 results"| P2["Phase 2<br/>Smithery + Glama + GitHub"]
+    P2 --> D
+    D --> R["Sorted Results"]
+
+    style Q fill:#8B5CF6,stroke:#6D28D9,color:#fff
+    style P1 fill:#10B981,stroke:#059669,color:#fff
+    style P2 fill:#F59E0B,stroke:#D97706,color:#fff
+    style D fill:#3B82F6,stroke:#2563EB,color:#fff
+    style R fill:#10B981,stroke:#059669,color:#fff
+```
+
 ### Architecture
 
 ```mermaid
@@ -455,6 +474,7 @@ All settings are loaded from environment variables (prefix: `SKILL_SWARM_`):
 | `SKILL_SWARM_SKILLSSH_NPX_PATH`        | `npx`     | Path to npx binary for `skills find`         |
 | `SKILL_SWARM_SKILLSSH_GITHUB_FALLBACK` | `true`    | Use GitHub topic search when npx unavailable |
 | `SKILL_SWARM_SKILLSSH_SEARCH_TIMEOUT`  | `30.0`    | Timeout for npx subprocess calls             |
+| `SKILL_SWARM_SEARCH_PHASE1_MIN_RESULTS` | `3`     | Phase 2 search trigger threshold             |
 
 ---
 
@@ -480,6 +500,10 @@ skill-swarm/
 │       ├── install.py         # install/uninstall wiring
 │       ├── inventory.py       # list/match/get_info wiring
 │       └── cherry_pick.py     # Section extraction
+├── agnos/                         # Agnostic specs (paradigm bridge)
+│   ├── spec-orchestration.md
+│   ├── spec-task-dependencies.md
+│   └── spec-agent-dispatch.md
 ├── skill/
 │   ├── SKILL.md               # Self-describing skill file
 │   └── references/            # Skill reference docs

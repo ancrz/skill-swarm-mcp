@@ -640,6 +640,51 @@ vercel-labs/agent-skills@frontend-design 45.2K installs
 
 
 # ============================================================================
+# UC14: QUERY NORMALIZATION
+# ============================================================================
+
+
+def test_uc14_normalized_vs_raw_query():
+    """UC14: Normalized queries should score >= raw natural language queries."""
+    start = time.monotonic()
+
+    from skill_swarm.core.normalizer import normalize_query
+
+    skill = SkillInfo(
+        name="docker-expert",
+        description="Docker containerization, multi-stage builds, container security, deployment",
+        tags=["docker", "container", "deploy", "devops"],
+    )
+
+    raw_query = "I need a tool that helps me deploy Docker containers to production"
+    normalized = normalize_query(raw_query)
+
+    score_raw = match_skill(skill, raw_query)
+    score_normalized = match_skill(skill, normalized)
+
+    passed = score_normalized >= score_raw
+    elapsed = (time.monotonic() - start) * 1000
+
+    metrics.record(
+        "UC14: normalized vs raw query",
+        passed,
+        elapsed,
+        {
+            "raw_query": raw_query,
+            "normalized": normalized,
+            "score_raw": round(score_raw, 3),
+            "score_normalized": round(score_normalized, 3),
+        },
+    )
+
+    assert passed, (
+        f"Normalized '{normalized}' scored {score_normalized} < raw scored {score_raw}"
+    )
+    print(f"  PASS: normalized={score_normalized:.3f} >= raw={score_raw:.3f} (query: '{normalized}')")
+    return passed
+
+
+# ============================================================================
 # MAIN
 # ============================================================================
 
@@ -668,6 +713,7 @@ if __name__ == "__main__":
         ("UC13:  Skills.sh search", test_uc13_skillssh_search),
         ("UC13b: Skills.sh in remote", test_uc13b_skillssh_in_remote),
         ("UC13c: Skills.sh output parser", test_uc13c_skillssh_parser),
+        ("UC14:  Normalized vs raw query", test_uc14_normalized_vs_raw_query),
     ]
 
     for name, test_fn in tests:

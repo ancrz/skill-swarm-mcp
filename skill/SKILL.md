@@ -13,9 +13,19 @@ This skill acts as the decision controller for the skill-swarm MCP server. It gu
 
 When facing a task, follow this decision tree before proceeding:
 
+### Query Format
+
+Always pass **keywords**, not sentences. The system normalizes input but works best with concise terms.
+
+| Good | Bad |
+|---|---|
+| `"docker deploy"` | `"I need to deploy containers with Docker"` |
+| `"pdf parsing"` | `"How do I parse PDF files?"` |
+| `"nextjs, react"` | `"I want to build a Next.js app with React"` |
+
 ### Step 1: Check Local Skills
 
-Call `match_skills(task_description)` with a natural language description of the task.
+Call `match_skills(task_description)` with **keywords** describing the task (e.g. `"docker deploy"`, `"pdf parsing"`).
 
 - If a result returns with `relevance_pct >= 60%` → use that skill directly
 - If a result returns with `30% <= relevance_pct < 60%` → consider `cherry_pick_context` to extract only the relevant sections

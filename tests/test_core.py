@@ -221,6 +221,53 @@ def test_normalize_skill_filenames():
             settings.skills_dir = original_skills_dir
 
 
+def test_normalize_query_sentence():
+    """Natural language sentence should be reduced to keywords."""
+    from skill_swarm.core.normalizer import normalize_query
+    result = normalize_query("I need a tool that can process PDF documents and extract tables")
+    assert "pdf" in result
+    assert "tables" in result or "extract" in result or "documents" in result
+    # Stopwords removed
+    for stopword in ["i", "need", "a", "that", "can", "and"]:
+        assert stopword not in result.split(), f"stopword '{stopword}' should be removed"
+    print(f"  PASS: normalized to '{result}'")
+
+
+def test_normalize_query_idempotent():
+    """Already-clean keywords should pass through unchanged."""
+    from skill_swarm.core.normalizer import normalize_query
+    assert normalize_query("docker") == "docker"
+    assert normalize_query("pdf parsing") == "pdf parsing"
+    assert normalize_query("kubernetes helm") == "kubernetes helm"
+    print("  PASS: idempotent for clean keywords")
+
+
+def test_normalize_query_all_stopwords():
+    """If all words are stopwords, return original query lowercased."""
+    from skill_swarm.core.normalizer import normalize_query
+    result = normalize_query("I want to use")
+    assert len(result) > 0
+    print(f"  PASS: all-stopwords returns '{result}'")
+
+
+def test_normalize_query_empty():
+    """Empty or whitespace-only input returns empty string."""
+    from skill_swarm.core.normalizer import normalize_query
+    assert normalize_query("") == ""
+    assert normalize_query("   ") == ""
+    print("  PASS: empty input handled")
+
+
+def test_normalize_query_mixed_case_whitespace():
+    """Mixed case and extra whitespace should be normalized."""
+    from skill_swarm.core.normalizer import normalize_query
+    result = normalize_query("  I Need To  PARSE  pdf  ")
+    assert "parse" in result
+    assert "pdf" in result
+    assert "  " not in result  # no double spaces
+    print(f"  PASS: mixed case/whitespace normalized to '{result}'")
+
+
 if __name__ == "__main__":
     print("=" * 60)
     print("skill-swarm core tests")
@@ -236,6 +283,11 @@ if __name__ == "__main__":
         ("Manifest: roundtrip", test_manifest_roundtrip),
         ("Installer: symlinks", test_create_symlinks),
         ("Installer: normalize filenames", test_normalize_skill_filenames),
+        ("Normalizer: sentence to keywords", test_normalize_query_sentence),
+        ("Normalizer: idempotent", test_normalize_query_idempotent),
+        ("Normalizer: all stopwords", test_normalize_query_all_stopwords),
+        ("Normalizer: empty input", test_normalize_query_empty),
+        ("Normalizer: mixed case/whitespace", test_normalize_query_mixed_case_whitespace),
     ]
 
     passed = 0

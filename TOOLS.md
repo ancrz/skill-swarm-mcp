@@ -8,7 +8,7 @@ Complete reference for all 8 tools exposed by the skill-swarm MCP server.
 
 | Tool                                        | Purpose                                            | Scope          |
 | ------------------------------------------- | -------------------------------------------------- | -------------- |
-| [search_skills](#search_skills)             | Find skills across 4 registries with trust scoring | Remote + Local |
+| [search_skills](#search_skills)             | Find skills across 5 registries with trust scoring | Remote + Local |
 | [match_skills](#match_skills)               | BM25F + 7-signal matching of installed skills      | Local          |
 | [install_skill](#install_skill)             | Download, scan, trust-check, and install globally  | Remote → Local |
 | [uninstall_skill](#uninstall_skill)         | Remove skill, symlinks, and tracking data          | Local          |
@@ -22,7 +22,7 @@ Complete reference for all 8 tools exposed by the skill-swarm MCP server.
 ## Recommended Workflow
 
 ```
-1. match_skills("parse PDFs")          → Check local skills first
+1. match_skills("pdf parsing")          → Check local skills first
 2. search_skills("parse PDF", "remote") → No local match? Search registries
 3. install_skill("pdf-parser", url)     → Install the best result
 4. cherry_pick_context("pdf-parser",    → Use only what you need
@@ -33,10 +33,11 @@ Complete reference for all 8 tools exposed by the skill-swarm MCP server.
 
 ## search_skills
 
-Search for skills across 4 remote registries with trust scoring, plus local installed skills.
+Search for skills across 5 remote registries with trust scoring, plus local installed skills.
 
 **Registries searched** (in parallel):
 
+- Skills.sh (`skills.sh`) — primary registry, actual agent skills
 - Official MCP Registry (`registry.modelcontextprotocol.io`)
 - Smithery (`registry.smithery.ai`)
 - Glama.ai (`glama.ai`)
@@ -46,7 +47,7 @@ Search for skills across 4 remote registries with trust scoring, plus local inst
 
 | Parameter | Type      | Default      | Description                                             |
 | --------- | --------- | ------------ | ------------------------------------------------------- |
-| `query`   | `string`  | _(required)_ | What you want to do (e.g. "parse PDF", "deploy docker") |
+| `query`   | `string`  | _(required)_ | Search keywords — NOT a full sentence (e.g. `"docker"`, `"pdf parsing"`). Separate terms with spaces or commas. |
 | `scope`   | `string`  | `"all"`      | Where to search: `"local"`, `"remote"`, or `"all"`      |
 | `limit`   | `integer` | `5`          | Maximum number of results to return                     |
 
@@ -85,7 +86,7 @@ JSON array of `SearchResult` objects:
 | ------------- | ------------------ | ------------------------------------------------------------------------ |
 | `name`        | `string`           | Skill/server name                                                        |
 | `description` | `string`           | What the skill does                                                      |
-| `source`      | `string`           | Origin: `"local"`, `"smithery"`, `"github"`, `"mcp_registry"`, `"glama"` |
+| `source`      | `string`           | Origin: `"local"`, `"skillssh"`, `"smithery"`, `"github"`, `"mcp_registry"`, `"glama"` |
 | `url`         | `string`           | Download URL or repository link                                          |
 | `relevance`   | `float`            | Match quality 0.0-1.0                                                    |
 | `tags`        | `string[]`         | Categorization tags                                                      |
@@ -114,7 +115,7 @@ JSON array of `SearchResult` objects:
 
 ```
 # Search everything
-search_skills("database access")
+search_skills("database")
 
 # Only search remote registries
 search_skills("web scraping", scope="remote", limit=10)
@@ -141,7 +142,7 @@ This is the **first tool to call** when you need a skill — check what's alread
 
 | Parameter          | Type     | Default      | Description                                          |
 | ------------------ | -------- | ------------ | ---------------------------------------------------- |
-| `task_description` | `string` | _(required)_ | What you want to accomplish                          |
+| `task_description` | `string` | _(required)_ | Search keywords — NOT a full sentence (e.g. `"docker deploy"`, `"pdf extract"`). Separate terms with spaces or commas. |
 | `threshold`        | `float`  | `0.05`       | Minimum relevance score (0.0-1.0). Default 0.05 = 5% |
 
 ### Returns
@@ -188,13 +189,13 @@ Each skill returned in match results is tracked as a `match` event in usage anal
 
 ```
 # Basic task matching
-match_skills("parse PDF files and extract text")
+match_skills("pdf parsing text extraction")
 
 # Broad query with lower threshold
 match_skills("deploy", threshold=0.01)
 
 # Strict matching for exact needs
-match_skills("kubernetes helm charts", threshold=0.15)
+match_skills("kubernetes helm", threshold=0.15)
 ```
 
 ---

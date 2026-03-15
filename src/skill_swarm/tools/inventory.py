@@ -3,6 +3,7 @@
 from skill_swarm.config import settings
 from skill_swarm.core.installer import load_manifest
 from skill_swarm.core.matcher import match_skills_local
+from skill_swarm.core.normalizer import normalize_query
 from skill_swarm.core.usage import get_all_stats, get_dead_skills, get_stats, record_event
 
 
@@ -79,6 +80,7 @@ def match_skills(task_description: str, threshold: float = 0.05) -> list[dict]:
     Returns:
         Skills sorted by relevance with match percentage.
     """
+    task_description = normalize_query(task_description)
     results = match_skills_local(task_description, threshold)
 
     # Track usage for matched skills

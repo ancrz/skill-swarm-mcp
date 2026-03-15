@@ -22,7 +22,7 @@ AI agents (Claude, Gemini, Copilot) need skills to be effective. Today, finding 
 3. Install and configure it by hand
 4. Repeat for every project
 
-**Skill Swarm automates the entire pipeline.** The agent asks "I need to parse PDFs" and Skill Swarm searches 5 registries (Skills.sh, MCP Registry, Smithery, Glama, GitHub), evaluates trust, installs the best match, and makes it available instantly.
+**Skill Swarm automates the entire pipeline.** The agent queries "pdf parsing" and Skill Swarm searches 5 registries (Skills.sh, MCP Registry, Smithery, Glama, GitHub), evaluates trust, installs the best match, and makes it available instantly.
 
 ---
 
@@ -30,7 +30,7 @@ AI agents (Claude, Gemini, Copilot) need skills to be effective. Today, finding 
 
 ```mermaid
 flowchart TD
-    A["🤖 Agent asks:<br/>'I need database access'"] --> B{match_skills}
+    A["🤖 Agent queries:<br/>'database access'"] --> B{match_skills}
     B -->|Local skill found| C["✅ Use it"]
     B -->|No match| D[search_skills]
     D --> E["5 registries<br/>in parallel"]
@@ -77,7 +77,8 @@ graph TB
     Server --> Registries
     Server --> Skills
 
-    subgraph Registries["4 Registries"]
+    subgraph Registries["5 Registries"]
+        SkillsSH["Skills.sh"]
         MCP["MCP Registry"]
         Smithery["Smithery"]
         Glama["Glama.ai"]
@@ -357,7 +358,9 @@ Local skill matching uses 7 weighted signals:
 
 ```mermaid
 graph LR
-    Q["Query"] --> E["Exact Match<br/>w=30"]
+    RQ["Raw Query"] --> NQ["Normalize<br/>stopword removal"]
+    NQ --> Q["Keywords"]
+    Q --> E["Exact Match<br/>w=30"]
     Q --> P["Prefix Match<br/>w=20"]
     Q --> PH["Phrase Match<br/>w=15"]
     Q --> B["BM25F<br/>w=15"]
@@ -373,6 +376,8 @@ graph LR
     FN --> S
     FD --> S
 
+    style RQ fill:#F59E0B,stroke:#D97706,color:#fff
+    style NQ fill:#F59E0B,stroke:#D97706,color:#fff
     style Q fill:#8B5CF6,stroke:#6D28D9,color:#fff
     style S fill:#10B981,stroke:#059669,color:#fff
     style E fill:#EF4444,stroke:#DC2626,color:#fff
@@ -463,6 +468,7 @@ skill-swarm/
 │   ├── models.py              # Data models (SkillInfo, TrustScore, etc.)
 │   ├── core/
 │   │   ├── scanner.py         # Security pattern scanner
+│   │   ├── normalizer.py      # Query normalization (stopword removal)
 │   │   ├── matcher.py         # BM25F + multi-signal scoring
 │   │   ├── installer.py       # Download, scan, install pipeline
 │   │   ├── registry.py        # 5-registry parallel search (Skills.sh primary)
@@ -498,10 +504,10 @@ skill-swarm/
 # Install with dev dependencies
 pip install -e .
 
-# Run all tests (42 total)
-.venv/bin/python tests/test_core.py           # 8 unit tests
+# Run all tests (52 total)
+.venv/bin/python tests/test_core.py           # Unit tests
 .venv/bin/python tests/test_e2e_effectiveness.py  # 19 E2E V1
-.venv/bin/python tests/test_e2e_v2.py         # 15 E2E V2
+.venv/bin/python tests/test_e2e_v2.py         # E2E V2
 
 # Test a single search
 .venv/bin/python -c "

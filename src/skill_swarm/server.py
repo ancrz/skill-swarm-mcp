@@ -26,8 +26,9 @@ mcp = FastMCP(
     instructions=(
         "Skill Swarm manages AI agent skills globally. "
         "Use match_skills first to check if a local skill exists for a task. "
+        "IMPORTANT: Pass keywords, NOT full sentences (e.g. 'docker deploy' not 'I need to deploy with docker'). "
         "If no match, use search_skills with scope='remote' to find one in 5 registries "
-        "(Official MCP Registry, Smithery, Glama, GitHub). "
+        "(Skills.sh, Official MCP Registry, Smithery, Glama, GitHub). "
         "Results include trust scores based on git-quality signals (stars, license, recency). "
         "Use cherry_pick_context to extract only the sections you need."
     ),
@@ -47,11 +48,11 @@ if _migrated:
 async def search_skills(query: str, scope: str = "all", limit: int = 5) -> str:
     """Search for skills across 5 registries with trust scoring.
 
-    Searches: Official MCP Registry, Smithery, Glama.ai, GitHub.
+    Searches: Skills.sh, Official MCP Registry, Smithery, Glama.ai, GitHub.
     Results include trust_score (0-1) computed from git signals.
 
     Args:
-        query: What you want to do (e.g. "parse PDF", "deploy docker")
+        query: Search keywords — NOT a full sentence (e.g. "docker", "pdf parsing", "kubernetes helm"). Separate terms with spaces or commas.
         scope: Where to search - "local", "remote", or "all"
         limit: Maximum number of results
     """
@@ -68,7 +69,7 @@ async def match_skills(task_description: str, threshold: float = 0.05) -> str:
     7 signals: exact match, prefix, phrase, BM25F, Jaccard tags, fuzzy name, fuzzy description.
 
     Args:
-        task_description: What you want to accomplish
+        task_description: Search keywords — NOT a full sentence (e.g. "docker deploy", "pdf extract", "react testing"). Separate terms with spaces or commas.
         threshold: Minimum relevance score 0.0-1.0 (default 0.05 = 5%)
     """
     from skill_swarm.tools.inventory import match_skills as _match

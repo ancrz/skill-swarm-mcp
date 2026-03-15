@@ -1,6 +1,7 @@
 """Search tools: find skills locally and remotely."""
 
 from skill_swarm.core.matcher import match_skills_local
+from skill_swarm.core.normalizer import normalize_query
 from skill_swarm.core.registry import search_remote
 from skill_swarm.core.usage import record_event
 from skill_swarm.models import SearchResult
@@ -21,6 +22,7 @@ async def search_skills(
     Returns:
         List of matching skills sorted by relevance.
     """
+    query = normalize_query(query)
     results: list[SearchResult] = []
 
     if scope in ("local", "all"):

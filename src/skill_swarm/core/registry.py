@@ -475,6 +475,42 @@ async def search_github(query: str, limit: int = 5) -> list[SearchResult]:
 # ─── 6. Combined Search ───────────────────────────────────────────────────
 
 
+async def _merge_and_score(
+    all_results: list[SearchResult],
+    limit: int,
+    with_trust: bool,
+) -> list[SearchResult]:
+    """Deduplicate, trust-score, and sort search results."""
+    # Deduplicate by composite key
+    seen: set[str] = set()
+    unique: list[SearchResult] = []
+    for r in sorted(all_results, key=lambda x: x.relevance, reverse=True):
+        norm_name = _normalize_name(r.name)
+        if r.source == "skillssh" and r.url:
+            dedup_key = f"{norm_name}:{r.url}"
+        else:
+            dedup_key = f"{norm_name}:{r.source}"
+        if dedup_key not in seen:
+            seen.add(dedup_key)
+            unique.append(r)
+
+    # Trust evaluation
+    if with_trust:
+        for r in unique:
+            if r.url and "github.com" in r.url:
+                trust = await evaluate_github_repo(r.url)
+                r.trust = trust
+                if r.source == "skillssh":
+                    r.relevance = round(r.relevance * 0.7 + trust.score * 0.3, 3)
+                else:
+                    r.relevance = round(r.relevance * 0.4 + trust.score * 0.6, 3)
+            else:
+                r.trust = quick_trust_from_registry(r.source)
+
+    unique.sort(key=lambda x: x.relevance, reverse=True)
+    return unique[:limit]
+
+
 async def search_remote(
     query: str,
     limit: int = 5,
@@ -500,42 +536,7 @@ async def search_remote(
         if isinstance(result_or_error, list):
             all_results.extend(result_or_error)
 
-    # Fix #1: Deduplicate by composite key (source_type + normalized_name)
-    # Skills from different repos (e.g., vercel-labs and antfu both have
-    # web-design-guidelines) are kept; same skill from same source is deduped.
-    seen: set[str] = set()
-    unique: list[SearchResult] = []
-    for r in sorted(all_results, key=lambda x: x.relevance, reverse=True):
-        norm_name = _normalize_name(r.name)
-        # For skillssh: use url as disambiguator (different repos = different skills)
-        if r.source == "skillssh" and r.url:
-            dedup_key = f"{norm_name}:{r.url}"
-        else:
-            dedup_key = f"{norm_name}:{r.source}"
-        if dedup_key not in seen:
-            seen.add(dedup_key)
-            unique.append(r)
-
-    # Fix #6: Evaluate real trust for all GitHub-hosted results
-    if with_trust:
-        for r in unique:
-            if r.url and "github.com" in r.url:
-                # Real trust eval for any result with a GitHub URL
-                trust = await evaluate_github_repo(r.url)
-                r.trust = trust
-                if r.source == "skillssh":
-                    # Skills.sh: keep high relevance, light trust adjustment
-                    r.relevance = round(r.relevance * 0.7 + trust.score * 0.3, 3)
-                else:
-                    # GitHub generic: heavier trust weighting
-                    r.relevance = round(r.relevance * 0.4 + trust.score * 0.6, 3)
-            else:
-                r.trust = quick_trust_from_registry(r.source)
-
-    # Re-sort by relevance after trust adjustment
-    unique.sort(key=lambda x: x.relevance, reverse=True)
-
-    return unique[:limit]
+    return await _merge_and_score(all_results, limit, with_trust)
 
 
 async def search_remote_phased(
@@ -586,35 +587,9 @@ async def search_remote_phased(
             if isinstance(result_or_error, list):
                 phase2_results.extend(result_or_error)
 
-    # ── Merge, deduplicate, trust-score (reuse existing logic) ──
+    # ── Merge, deduplicate, trust-score (shared helper) ──
     all_results = phase1_results + phase2_results
-
-    seen: set[str] = set()
-    unique: list[SearchResult] = []
-    for r in sorted(all_results, key=lambda x: x.relevance, reverse=True):
-        norm_name = _normalize_name(r.name)
-        if r.source == "skillssh" and r.url:
-            dedup_key = f"{norm_name}:{r.url}"
-        else:
-            dedup_key = f"{norm_name}:{r.source}"
-        if dedup_key not in seen:
-            seen.add(dedup_key)
-            unique.append(r)
-
-    if with_trust:
-        for r in unique:
-            if r.url and "github.com" in r.url:
-                trust = await evaluate_github_repo(r.url)
-                r.trust = trust
-                if r.source == "skillssh":
-                    r.relevance = round(r.relevance * 0.7 + trust.score * 0.3, 3)
-                else:
-                    r.relevance = round(r.relevance * 0.4 + trust.score * 0.6, 3)
-            else:
-                r.trust = quick_trust_from_registry(r.source)
-
-    unique.sort(key=lambda x: x.relevance, reverse=True)
-    final = unique[:limit]
+    final = await _merge_and_score(all_results, limit, with_trust)
 
     metadata = SearchMetadata(
         phase1_sources=phase1_source_names,

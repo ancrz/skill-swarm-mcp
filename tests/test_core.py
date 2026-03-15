@@ -5,8 +5,7 @@ import json
 import tempfile
 from pathlib import Path
 
-import sys
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+import pytest
 
 from skill_swarm.core.scanner import scan_skill
 from skill_swarm.core.matcher import match_skill, _parse_skill_file
@@ -269,6 +268,7 @@ def test_normalize_query_mixed_case_whitespace():
     print(f"  PASS: mixed case/whitespace normalized to '{result}'")
 
 
+@pytest.mark.network
 def test_search_remote_phased_returns_tuple():
     """search_remote_phased should return (list, SearchMetadata)."""
     import asyncio
@@ -285,6 +285,7 @@ def test_search_remote_phased_returns_tuple():
     print(f"  PASS: returned tuple, P1={metadata.phase1_results}, P2={metadata.phase2_results}")
 
 
+@pytest.mark.network
 def test_search_remote_phased_metadata_fields():
     """SearchMetadata fields should be populated correctly."""
     import asyncio
@@ -301,6 +302,7 @@ def test_search_remote_phased_metadata_fields():
     print(f"  PASS: metadata fields valid, all_failed={metadata.all_failed}")
 
 
+@pytest.mark.network
 def test_search_skills_still_returns_list():
     """Regression guard: search_skills must return list[SearchResult]."""
     import asyncio
@@ -314,6 +316,7 @@ def test_search_skills_still_returns_list():
     print(f"  PASS: search_skills returns list ({len(results)} results)")
 
 
+@pytest.mark.network
 def test_search_remote_phased_graceful_on_nonsense():
     """Phased search should never raise, even on gibberish queries."""
     import asyncio
@@ -329,46 +332,86 @@ def test_search_remote_phased_graceful_on_nonsense():
     print(f"  PASS: graceful on nonsense, results={len(results)}, all_failed={metadata.all_failed}")
 
 
-if __name__ == "__main__":
-    print("=" * 60)
-    print("skill-swarm core tests")
-    print("=" * 60)
+def test_update_skill_content_changed():
+    """Update should succeed when source content changed."""
+    from skill_swarm.core.installer import update_skill, load_manifest, save_manifest
 
-    tests = [
-        ("Scanner: clean skill", test_scanner_clean_skill),
-        ("Scanner: malicious skill", test_scanner_malicious_skill),
-        ("Matcher: relevance scoring", test_matcher_scoring),
-        ("Parser: skill file frontmatter", test_parse_skill_file),
-        ("Cherry-pick: section parsing", test_cherry_pick_sections),
-        ("Cherry-pick: real file", test_cherry_pick_with_real_file),
-        ("Manifest: roundtrip", test_manifest_roundtrip),
-        ("Installer: symlinks", test_create_symlinks),
-        ("Installer: normalize filenames", test_normalize_skill_filenames),
-        ("Normalizer: sentence to keywords", test_normalize_query_sentence),
-        ("Normalizer: idempotent", test_normalize_query_idempotent),
-        ("Normalizer: all stopwords", test_normalize_query_all_stopwords),
-        ("Normalizer: empty input", test_normalize_query_empty),
-        ("Normalizer: mixed case/whitespace", test_normalize_query_mixed_case_whitespace),
-        ("Phased search: returns tuple", test_search_remote_phased_returns_tuple),
-        ("Phased search: metadata fields", test_search_remote_phased_metadata_fields),
-        ("Phased search: search_skills returns list", test_search_skills_still_returns_list),
-        ("Phased search: graceful on nonsense", test_search_remote_phased_graceful_on_nonsense),
-    ]
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        # Create installed skill
+        skill_dir = tmp_path / "test-update"
+        skill_dir.mkdir()
+        skill_file = skill_dir / "SKILL.md"
+        skill_file.write_text("---\nname: test-update\ndescription: v1\n---\n# V1\n")
 
-    passed = 0
-    failed = 0
+        # Create source file (different content)
+        source_file = tmp_path / "source.md"
+        source_file.write_text("---\nname: test-update\ndescription: v2 updated\n---\n# V2\n")
 
-    for name, test_fn in tests:
+        # Set up manifest
+        manifest = SkillManifest(skills={
+            "test-update": SkillInfo(
+                name="test-update", description="v1",
+                source=str(source_file),
+                installed_path=str(skill_file),
+            )
+        })
+
+        original_skills_dir = settings.skills_dir
+        settings.skills_dir = tmp_path
         try:
-            print(f"\n[TEST] {name}")
-            test_fn()
-            passed += 1
-        except Exception as e:
-            print(f"  FAIL: {e}")
-            failed += 1
+            save_manifest(manifest)
+            result = asyncio.run(update_skill("test-update"))
+            assert result.success is True
+            assert not any("up to date" in e.lower() for e in result.errors)
+            # Verify content changed
+            assert "V2" in skill_file.read_text()
+            print("  PASS: update changed content")
+        finally:
+            settings.skills_dir = original_skills_dir
 
-    print(f"\n{'=' * 60}")
-    print(f"Results: {passed} passed, {failed} failed, {passed + failed} total")
-    print(f"{'=' * 60}")
 
-    exit(1 if failed > 0 else 0)
+def test_update_skill_no_change():
+    """Update should report 'already up to date' when content is identical."""
+    from skill_swarm.core.installer import update_skill, save_manifest
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        skill_dir = tmp_path / "test-same"
+        skill_dir.mkdir()
+        content = "---\nname: test-same\ndescription: same\n---\n# Same\n"
+        (skill_dir / "SKILL.md").write_text(content)
+
+        source_file = tmp_path / "source.md"
+        source_file.write_text(content)  # Same content
+
+        manifest = SkillManifest(skills={
+            "test-same": SkillInfo(
+                name="test-same", description="same",
+                source=str(source_file),
+                installed_path=str(skill_dir / "SKILL.md"),
+            )
+        })
+
+        original_skills_dir = settings.skills_dir
+        settings.skills_dir = tmp_path
+        try:
+            save_manifest(manifest)
+            result = asyncio.run(update_skill("test-same"))
+            assert result.success is True
+            assert any("up to date" in e.lower() for e in result.errors)
+            print("  PASS: no change detected")
+        finally:
+            settings.skills_dir = original_skills_dir
+
+
+def test_update_skill_not_installed():
+    """Update should fail for non-installed skill."""
+    from skill_swarm.core.installer import update_skill
+
+    result = asyncio.run(update_skill("nonexistent-skill-xyz-123"))
+    assert result.success is False
+    assert any("not installed" in e.lower() for e in result.errors)
+    print("  PASS: not installed error")
+
+

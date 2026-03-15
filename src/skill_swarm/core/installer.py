@@ -1,9 +1,11 @@
 """Skill installation pipeline: download, scan, install, symlink."""
 
 import asyncio
+import hashlib
 import io
 import json
 import logging
+import os
 import re
 import shutil
 import tempfile
@@ -240,6 +242,109 @@ async def uninstall_skill(name: str) -> InstallResult:
 
     logger.info("Uninstalled '%s'", name)
     return InstallResult(skill_name=name, success=True)
+
+
+async def update_skill(name: str) -> InstallResult:
+    """Update an installed skill from its original source.
+
+    Downloads latest version, compares SHA-256 hashes, and atomically
+    replaces if content changed. Symlinks are preserved (they point to
+    the directory, not the file).
+    """
+    manifest = load_manifest()
+
+    if name not in manifest.skills:
+        return InstallResult(
+            skill_name=name, success=False,
+            errors=[f"Skill '{name}' is not installed"],
+        )
+
+    info = manifest.skills[name]
+    source = info.source
+
+    if not source:
+        return InstallResult(
+            skill_name=name, success=False,
+            errors=[f"Skill '{name}' has no source URL recorded — cannot update"],
+        )
+
+    # Validate local source paths
+    if source.startswith("/") or source.startswith("file://"):
+        local_path = source.replace("file://", "")
+        if not Path(local_path).exists():
+            return InstallResult(
+                skill_name=name, success=False,
+                errors=[f"Source path no longer exists: {source}"],
+            )
+
+    installed_path = settings.skill_path(name)
+    if not installed_path.exists():
+        return InstallResult(
+            skill_name=name, success=False,
+            errors=[f"Installed file not found at {installed_path}"],
+        )
+
+    # Stage temp download inside skills_dir for os.replace atomicity
+    temp_dir = settings.skills_dir / f".update-{name}"
+    try:
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        temp_file = temp_dir / "SKILL.md"
+
+        # Download new version
+        await _download_skill(source, temp_file, temp_dir)
+
+        # Find SKILL.md in downloaded content
+        downloaded = _find_skill_md(temp_dir)
+        if not downloaded:
+            return InstallResult(
+                skill_name=name, success=False,
+                errors=[f"No SKILL.md found in downloaded content from {source}"],
+            )
+
+        # Security scan
+        scan_result = scan_skill(temp_dir, name)
+        if not scan_result.passed:
+            return InstallResult(
+                skill_name=name, success=False,
+                security_score=scan_result.score,
+                errors=[f"Security scan failed: {', '.join(scan_result.findings)}"],
+            )
+
+        # SHA-256 comparison
+        old_hash = hashlib.sha256(installed_path.read_bytes()).hexdigest()
+        new_hash = hashlib.sha256(downloaded.read_bytes()).hexdigest()
+
+        if old_hash == new_hash:
+            return InstallResult(
+                skill_name=name, success=True,
+                install_path=str(installed_path),
+                security_score=scan_result.score,
+                errors=["Already up to date (content unchanged)"],
+            )
+
+        # Atomic replace
+        os.replace(str(downloaded), str(installed_path))
+
+        # Update manifest description
+        new_desc = _extract_description(installed_path)
+        if new_desc:
+            manifest.skills[name].description = new_desc
+        save_manifest(manifest)
+
+        return InstallResult(
+            skill_name=name, success=True,
+            install_path=str(installed_path),
+            agents_linked=info.agents,
+            security_score=scan_result.score,
+        )
+    except Exception as e:
+        return InstallResult(
+            skill_name=name, success=False,
+            errors=[f"Update failed: {e}"],
+        )
+    finally:
+        if temp_dir.exists():
+            shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 async def _download_skill(source: str, target_file: Path, temp_dir: Path) -> bool:

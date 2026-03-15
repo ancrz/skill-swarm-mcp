@@ -9,6 +9,7 @@ dependencies = [
     "pydantic>=2.10.0",
     "pydantic-settings>=2.7.0",
     "rapidfuzz>=3.0.0",
+    "pyyaml>=6.0",
 ]
 
 [project.scripts]
@@ -21,6 +22,10 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/skill_swarm"]
 
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-asyncio_mode = "auto"
+pythonpath = ["src"]
+markers = ["network: tests requiring internet access"]

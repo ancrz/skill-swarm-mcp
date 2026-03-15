@@ -15,8 +15,7 @@ import shutil
 import time
 from pathlib import Path
 
-import sys
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+import pytest
 
 from skill_swarm.config import settings
 from skill_swarm.core.installer import load_manifest, save_manifest, install_skill, uninstall_skill
@@ -129,6 +128,7 @@ def test_uc1c_match_partial():
 # USE CASE 2: REMOTE SEARCH (search_skills remote)
 # ============================================================================
 
+@pytest.mark.network
 def test_uc2_search_smithery():
     """UC2: Search Smithery for MCP servers."""
     start = time.monotonic()
@@ -145,6 +145,7 @@ def test_uc2_search_smithery():
     return passed
 
 
+@pytest.mark.network
 def test_uc2b_search_github():
     """UC2b: Search GitHub for skill repos."""
     start = time.monotonic()
@@ -161,6 +162,7 @@ def test_uc2b_search_github():
     return passed
 
 
+@pytest.mark.network
 def test_uc2c_search_combined():
     """UC2c: Combined local + remote search."""
     start = time.monotonic()
@@ -562,113 +564,3 @@ def test_uc6_scanner_patterns():
 # MAIN: RUN ALL TESTS AND GENERATE EFFECTIVENESS REPORT
 # ============================================================================
 
-if __name__ == "__main__":
-    print("=" * 70)
-    print("SKILL-SWARM E2E EFFECTIVENESS TESTS")
-    print("Ontological approach: testing every dependency layer")
-    print("=" * 70)
-
-    tests = [
-        # UC1: Local matching
-        ("UC1:  Match existing skill (local)", test_uc1_match_existing_skill),
-        ("UC1b: No match (correct empty)", test_uc1b_match_no_match),
-        ("UC1c: Partial match (cherry-pick tag)", test_uc1c_match_partial),
-        # UC2: Remote search
-        ("UC2:  Smithery registry search", test_uc2_search_smithery),
-        ("UC2b: GitHub search", test_uc2b_search_github),
-        ("UC2c: Combined local+remote search", test_uc2c_search_combined),
-        # UC3: Install lifecycle
-        ("UC3:  Install from file", test_uc3_install_from_url),
-        ("UC3b: Duplicate install detection", test_uc3b_install_duplicate),
-        ("UC3c: Malicious skill blocked", test_uc3c_install_malicious_blocked),
-        ("UC3d: Uninstall complete", test_uc3d_uninstall),
-        # UC4: Cherry-pick
-        ("UC4:  Cherry-pick exact section", test_uc4_cherry_pick_exact),
-        ("UC4b: Cherry-pick multiple sections", test_uc4b_cherry_pick_multiple),
-        ("UC4c: Cherry-pick fuzzy match", test_uc4c_cherry_pick_fuzzy),
-        ("UC4d: Cherry-pick nonexistent section", test_uc4d_cherry_pick_nonexistent),
-        # UC5: Inventory
-        ("UC5:  List all skills", test_uc5_list_skills),
-        ("UC5b: List by agent filter", test_uc5b_list_by_agent),
-        ("UC5c: Get skill info", test_uc5c_get_skill_info),
-        ("UC5d: Get nonexistent skill info", test_uc5d_get_nonexistent_skill),
-        # UC6: Security
-        ("UC6:  Scanner pattern accuracy", test_uc6_scanner_patterns),
-    ]
-
-    for name, test_fn in tests:
-        try:
-            print(f"\n[TEST] {name}")
-            result = test_fn()
-            status = "PASS" if result else "FAIL"
-            print(f"  → {status}")
-        except Exception as e:
-            print(f"  → ERROR: {e}")
-            metrics.record(name, False, 0, {"error": str(e)})
-
-    # ========================================================================
-    # EFFECTIVENESS REPORT
-    # ========================================================================
-    summary = metrics.summary()
-
-    print(f"\n{'=' * 70}")
-    print("EFFECTIVENESS REPORT")
-    print(f"{'=' * 70}")
-    print(f"Total tests:     {summary['total']}")
-    print(f"Passed:          {summary['passed']}")
-    print(f"Failed:          {summary['failed']}")
-    print(f"Pass rate:       {summary['pass_rate']}")
-    print(f"Avg duration:    {summary['avg_duration_ms']} ms")
-
-    if summary['failures']:
-        print("\n--- FAILURES ---")
-        for f in summary['failures']:
-            print(f"  {f['test']}: {f['details'].get('verdict', 'UNKNOWN')}")
-            if 'errors' in f['details']:
-                print(f"    errors: {f['details']['errors']}")
-
-    print("\n--- DETAILED METRICS ---")
-    for r in metrics.results:
-        status = "✓" if r['passed'] else "✗"
-        verdict = r['details'].get('verdict', '')
-        print(f"  {status} {r['test']:<45} {r['duration_ms']:>8.1f}ms  {verdict}")
-
-    print("\n--- FINE-TUNING RECOMMENDATIONS ---")
-
-    # Analyze effectiveness
-    search_tests = [r for r in metrics.results if "search" in r['test'].lower() or "UC2" in r['test']]
-    match_tests = [r for r in metrics.results if "match" in r['test'].lower() or "UC1" in r['test']]
-    install_tests = [r for r in metrics.results if "install" in r['test'].lower() or "UC3" in r['test']]
-    cherry_tests = [r for r in metrics.results if "cherry" in r['test'].lower() or "UC4" in r['test']]
-    scanner_tests = [r for r in metrics.results if "scanner" in r['test'].lower() or "UC6" in r['test']]
-
-    categories = [
-        ("Local Matching", match_tests),
-        ("Remote Search", search_tests),
-        ("Install Lifecycle", install_tests),
-        ("Cherry-Pick", cherry_tests),
-        ("Security Scanner", scanner_tests),
-    ]
-
-    for cat_name, cat_tests in categories:
-        if not cat_tests:
-            continue
-        cat_passed = sum(1 for t in cat_tests if t['passed'])
-        cat_total = len(cat_tests)
-        cat_rate = cat_passed / cat_total * 100
-        avg_ms = sum(t['duration_ms'] for t in cat_tests) / cat_total
-
-        status = "OK" if cat_rate == 100 else "NEEDS WORK" if cat_rate >= 50 else "CRITICAL"
-        print(f"  {cat_name:<25} {cat_passed}/{cat_total} ({cat_rate:.0f}%)  avg={avg_ms:.0f}ms  [{status}]")
-
-    print(f"\n{'=' * 70}")
-
-    # Write full report to file
-    report_path = Path("/tmp/skill-swarm-effectiveness.json")
-    report_path.write_text(json.dumps({
-        "summary": summary,
-        "detailed_results": metrics.results,
-    }, indent=2, default=str))
-    print(f"Full report: {report_path}")
-
-    exit(1 if summary['failed'] > 0 else 0)

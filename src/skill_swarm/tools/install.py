@@ -3,7 +3,8 @@
 from skill_swarm.core.cache import purge_prefix
 from skill_swarm.core.installer import install_skill as _install
 from skill_swarm.core.installer import uninstall_skill as _uninstall
-from skill_swarm.core.usage import mark_installed, remove_stats
+from skill_swarm.core.installer import update_skill as _update
+from skill_swarm.core.usage import mark_installed, record_event, remove_stats
 from skill_swarm.models import InstallResult
 
 
@@ -47,6 +48,24 @@ async def uninstall_skill(name: str) -> InstallResult:
 
     if result.success:
         remove_stats(name)
+        purge_prefix("search")
+
+    return result
+
+
+async def update_skill(name: str) -> InstallResult:
+    """Check for updates and apply if content changed.
+
+    Args:
+        name: Skill identifier to update
+
+    Returns:
+        InstallResult with success status and whether content changed.
+    """
+    result = await _update(name=name)
+
+    if result.success and not any("up to date" in e.lower() for e in result.errors):
+        record_event(name, "full_read")
         purge_prefix("search")
 
     return result

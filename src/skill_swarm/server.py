@@ -1,10 +1,11 @@
 """skill-swarm MCP server.
 
-Provides 8 tools for AI agent skill management:
+Provides 9 tools for AI agent skill management:
 - search_skills: Find skills locally and in 5 remote registries with trust scoring
 - match_skills: BM25F + multi-signal scoring of installed skills against a task
 - install_skill: Download, security-scan, trust-check, and install globally
 - uninstall_skill: Remove a skill and all agent symlinks
+- update_skill: Check for updates and atomically replace if content changed
 - list_skills: Inventory with health status, usage stats, and dead skill detection
 - get_skill_info: Full metadata, content, and usage stats of a skill
 - cherry_pick_context: Extract specific sections from a skill (partial context)
@@ -30,7 +31,8 @@ mcp = FastMCP(
         "If no match, use search_skills with scope='remote' to find one in 5 registries "
         "(Skills.sh, Official MCP Registry, Smithery, Glama, GitHub). "
         "Results include trust scores based on git-quality signals (stars, license, recency). "
-        "Use cherry_pick_context to extract only the sections you need."
+        "Use cherry_pick_context to extract only the sections you need. "
+        "Use update_skill to refresh an installed skill from its original source."
     ),
 )
 
@@ -107,6 +109,22 @@ async def uninstall_skill(name: str) -> str:
     from skill_swarm.tools.install import uninstall_skill as _uninstall
 
     result = await _uninstall(name=name)
+    return json.dumps(result.model_dump(), indent=2)
+
+
+@mcp.tool()
+async def update_skill(name: str) -> str:
+    """Check for updates to an installed skill from its original source.
+
+    Compares SHA-256 of installed vs remote content. If different,
+    atomically replaces the installed version after security scan.
+
+    Args:
+        name: Skill name to update
+    """
+    from skill_swarm.tools.install import update_skill as _update
+
+    result = await _update(name=name)
     return json.dumps(result.model_dump(), indent=2)
 
 

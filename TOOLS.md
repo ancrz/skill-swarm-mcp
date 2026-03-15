@@ -1,6 +1,6 @@
 # Tools Reference
 
-Complete reference for all 8 tools exposed by the skill-swarm MCP server.
+Complete reference for all 9 tools exposed by the skill-swarm MCP server.
 
 ---
 
@@ -12,6 +12,7 @@ Complete reference for all 8 tools exposed by the skill-swarm MCP server.
 | [match_skills](#match_skills)               | BM25F + 7-signal matching of installed skills      | Local          |
 | [install_skill](#install_skill)             | Download, scan, trust-check, and install globally  | Remote → Local |
 | [uninstall_skill](#uninstall_skill)         | Remove skill, symlinks, and tracking data          | Local          |
+| [update_skill](#update_skill)               | Check and apply updates from original source       | Remote → Local |
 | [list_skills](#list_skills)                 | Inventory with health, symlinks, and usage stats   | Local          |
 | [get_skill_info](#get_skill_info)           | Full metadata, content, and usage of a skill       | Local          |
 | [cherry_pick_context](#cherry_pick_context) | Extract specific markdown sections from a skill    | Local          |
@@ -27,6 +28,7 @@ Complete reference for all 8 tools exposed by the skill-swarm MCP server.
 3. install_skill("pdf-parser", url)     → Install the best result
 4. cherry_pick_context("pdf-parser",    → Use only what you need
      "Quick Start,API Reference")
+5. update_skill("pdf-parser")           → Refresh from source when needed
 ```
 
 ---
@@ -359,6 +361,91 @@ JSON `InstallResult` object:
 ```
 # Remove a skill completely
 uninstall_skill("pdf-parser")
+```
+
+---
+
+## update_skill
+
+Check for updates to an installed skill from its original source and apply atomically if content changed.
+
+### Pipeline
+
+```
+load manifest → validate source → download to temp (in skills_dir) → security scan → SHA-256 compare → atomic replace (if changed)
+```
+
+### Parameters
+
+| Parameter | Type     | Default      | Description                  |
+| --------- | -------- | ------------ | ---------------------------- |
+| `name`    | `string` | _(required)_ | Skill name to update         |
+
+### Returns
+
+JSON `InstallResult` object:
+
+```json
+{
+  "skill_name": "pdf-parser",
+  "success": true,
+  "install_path": "/home/user/.agent/skills/pdf-parser/SKILL.md",
+  "agents_linked": ["claude", "gemini"],
+  "security_score": 0.95,
+  "trust_score": null,
+  "errors": []
+}
+```
+
+If content is already up to date:
+
+```json
+{
+  "skill_name": "pdf-parser",
+  "success": true,
+  "install_path": "/home/user/.agent/skills/pdf-parser/SKILL.md",
+  "agents_linked": [],
+  "security_score": 0.95,
+  "trust_score": null,
+  "errors": ["Already up to date (content unchanged)"]
+}
+```
+
+### How It Works
+
+1. Reads the `source` URL recorded in the manifest at install time
+2. Downloads the latest version to a temp directory inside `skills_dir` (ensuring `os.replace()` atomicity across the same filesystem)
+3. Runs the same security scanner as `install_skill`
+4. Computes SHA-256 of old and new content
+5. If hashes differ: atomically replaces the installed file and updates manifest description
+6. If hashes match: returns success with "Already up to date" in `errors`
+7. Symlinks are preserved — they point to the skill directory, not the file
+
+### Side Effects (when content changed)
+
+- Records a `full_read` event in usage tracking
+- Purges search cache (content changed)
+- Updates `description` in `manifest.json` if frontmatter changed
+
+### Error Cases
+
+| Error                                   | Cause                                     |
+| --------------------------------------- | ----------------------------------------- |
+| `"Skill 'X' is not installed"`          | Skill not in manifest                     |
+| `"Skill 'X' has no source URL"`         | Manifest entry missing `source` field     |
+| `"Source path no longer exists"`        | Local file source was deleted or moved    |
+| `"No SKILL.md found in downloaded..."`  | Source no longer contains a valid skill   |
+| `"Security scan failed"`                | Downloaded content failed security check  |
+| `"Update failed: ..."`                  | Unexpected I/O or network error           |
+
+### Examples
+
+```
+# Update a skill from its original source
+update_skill("pdf-parser")
+
+# Update skill-swarm itself
+update_skill("skill-swarm")
 ```
 
 ---

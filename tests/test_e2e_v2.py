@@ -11,11 +11,9 @@ Tests the 7 improvements:
 
 import asyncio
 import json
-import sys
 import time
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+import pytest
 
 from skill_swarm.core.cache import cache_stats, get_cached, purge_all, set_cached
 from skill_swarm.core.matcher import match_skill
@@ -169,6 +167,7 @@ def test_uc7b_trust_composite():
     return True
 
 
+@pytest.mark.network
 def test_uc7c_trust_github_real():
     """UC7c: Real GitHub trust evaluation with token auth."""
     start = time.monotonic()
@@ -237,6 +236,7 @@ def test_uc8b_cache_ttl_expiry():
     return True
 
 
+@pytest.mark.network
 def test_uc8c_cache_search_hit():
     """UC8c: Second search should be a cache hit (faster)."""
     start = time.monotonic()
@@ -273,6 +273,7 @@ def test_uc8c_cache_search_hit():
 # ============================================================================
 
 
+@pytest.mark.network
 def test_uc9_multi_registry():
     """UC9: Search across multiple registries with deduplication."""
     start = time.monotonic()
@@ -299,6 +300,7 @@ def test_uc9_multi_registry():
     return passed
 
 
+@pytest.mark.network
 def test_uc9b_trust_in_results():
     """UC9b: Remote search results include trust scores."""
     start = time.monotonic()
@@ -548,6 +550,7 @@ def test_uc12_skill_health():
 # ============================================================================
 
 
+@pytest.mark.network
 def test_uc13_skillssh_search():
     """UC13: skills.sh search runs without errors, returning correct types."""
     start = time.monotonic()
@@ -575,6 +578,7 @@ def test_uc13_skillssh_search():
     return passed
 
 
+@pytest.mark.network
 def test_uc13b_skillssh_in_remote():
     """UC13b: skills.sh results appear in combined remote search."""
     start = time.monotonic()
@@ -688,68 +692,3 @@ def test_uc14_normalized_vs_raw_query():
 # MAIN
 # ============================================================================
 
-if __name__ == "__main__":
-    print("=" * 70)
-    print("SKILL-SWARM E2E V2 TESTS")
-    print("Testing: Trust, Cache, Multi-Registry, Usage, Matcher V2")
-    print("=" * 70)
-
-    tests = [
-        ("UC7:   Trust dimension formulas", test_uc7_trust_dimensions),
-        ("UC7b:  Trust composite verdicts", test_uc7b_trust_composite),
-        ("UC7c:  Real GitHub trust eval", test_uc7c_trust_github_real),
-        ("UC8:   Cache set/get", test_uc8_cache_set_get),
-        ("UC8b:  Cache TTL expiry", test_uc8b_cache_ttl_expiry),
-        ("UC8c:  Cache search hit", test_uc8c_cache_search_hit),
-        ("UC9:   Multi-registry search", test_uc9_multi_registry),
-        ("UC9b:  Trust in search results", test_uc9b_trust_in_results),
-        ("UC10:  Usage event tracking", test_uc10_usage_events),
-        ("UC10b: Dead skill detection", test_uc10b_dead_detection),
-        ("UC11:  Exact match boost", test_uc11_exact_match_boost),
-        ("UC11b: Typo tolerance", test_uc11b_typo_tolerance),
-        ("UC11c: BM25F field weights", test_uc11c_bm25f_field_weights),
-        ("UC11d: Local match V2", test_uc11d_local_match_v2),
-        ("UC12:  Skill health", test_uc12_skill_health),
-        ("UC13:  Skills.sh search", test_uc13_skillssh_search),
-        ("UC13b: Skills.sh in remote", test_uc13b_skillssh_in_remote),
-        ("UC13c: Skills.sh output parser", test_uc13c_skillssh_parser),
-        ("UC14:  Normalized vs raw query", test_uc14_normalized_vs_raw_query),
-    ]
-
-    for name, test_fn in tests:
-        try:
-            print(f"\n[TEST] {name}")
-            result = test_fn()
-            print(f"  -> {'PASS' if result else 'FAIL'}")
-        except Exception as e:
-            print(f"  -> ERROR: {e}")
-            metrics.record(name, False, 0, {"error": str(e)})
-
-    summary = metrics.summary()
-    print(f"\n{'=' * 70}")
-    print(
-        f"V2 RESULTS: {summary['passed']}/{summary['total']} ({summary['pass_rate']})"
-    )
-    print(f"{'=' * 70}")
-
-    if summary["failed"] > 0:
-        print("\n--- FAILURES ---")
-        for r in metrics.results:
-            if not r["passed"]:
-                print(f"  {r['test']}: {r['details']}")
-
-    print("\n--- DETAILED ---")
-    for r in metrics.results:
-        s = "+" if r["passed"] else "X"
-        print(f"  {s} {r['test']:<40} {r['duration_ms']:>8.1f}ms  {r['details']}")
-
-    # Write report
-    report = Path("/tmp/skill-swarm-v2-effectiveness.json")
-    report.write_text(
-        json.dumps(
-            {"summary": summary, "results": metrics.results}, indent=2, default=str
-        )
-    )
-    print(f"\nReport: {report}")
-
-    exit(1 if summary["failed"] > 0 else 0)

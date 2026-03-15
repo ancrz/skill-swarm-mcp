@@ -7,7 +7,7 @@
 [![Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue?style=flat-square)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.13+-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
 [![MCP](https://img.shields.io/badge/MCP-Protocol-black?style=flat-square)](https://modelcontextprotocol.io)
-[![8 Tools](https://img.shields.io/badge/Tools-8-green?style=flat-square)]()
+[![9 Tools](https://img.shields.io/badge/Tools-9-green?style=flat-square)]()
 
 </div>
 
@@ -82,7 +82,7 @@ graph TB
 
     subgraph Server["skill-swarm MCP Server"]
         direction TB
-        Tools["8 Tools · Python 3.13"]
+        Tools["9 Tools · Python 3.13"]
         subgraph Core["Core Engines"]
             Matcher["Matcher V2<br/>BM25F + 7 signals"]
             Trust["Trust Engine<br/>5 dimensions · git-quality"]
@@ -294,7 +294,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}
 
 ---
 
-## 8 Tools Reference
+## 9 Tools Reference
 
 | Tool                    | Description                              | Key Args                        |
 | ----------------------- | ---------------------------------------- | ------------------------------- |
@@ -302,6 +302,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}
 | **match_skills**        | BM25F + 7-signal local matching          | `task_description`, `threshold` |
 | **install_skill**       | Download, scan, trust-check, install     | `name`, `source`, `agents`      |
 | **uninstall_skill**     | Remove skill + symlinks + tracking       | `name`                          |
+| **update_skill**        | Check and apply updates from source      | `name`                          |
 | **list_skills**         | Inventory with health and usage stats    | `agent`                         |
 | **get_skill_info**      | Full metadata + content of a skill       | `name`                          |
 | **cherry_pick_context** | Extract specific markdown sections       | `skill_name`, `sections`        |
@@ -483,7 +484,7 @@ All settings are loaded from environment variables (prefix: `SKILL_SWARM_`):
 ```
 skill-swarm/
 ├── src/skill_swarm/
-│   ├── server.py              # FastMCP entry point (8 tools)
+│   ├── server.py              # FastMCP entry point (9 tools)
 │   ├── config.py              # Pydantic Settings + path helpers
 │   ├── models.py              # Data models (SkillInfo, TrustScore, etc.)
 │   ├── core/
@@ -526,12 +527,13 @@ skill-swarm/
 
 ```bash
 # Install with dev dependencies
-pip install -e .
+pip install -e ".[dev]"
 
-# Run all tests (52 total)
-.venv/bin/python tests/test_core.py           # Unit tests
-.venv/bin/python tests/test_e2e_effectiveness.py  # 19 E2E V1
-.venv/bin/python tests/test_e2e_v2.py         # E2E V2
+# Run all non-network tests
+.venv/bin/python -m pytest tests/ -v -m "not network"
+
+# Run with network tests (requires internet access)
+.venv/bin/python -m pytest tests/ -v
 
 # Test a single search
 .venv/bin/python -c "

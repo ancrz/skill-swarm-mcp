@@ -178,6 +178,8 @@ Skill Swarm uses **stdio** transport — the AI client launches the Python proce
 
 > **How secrets work with stdio:** Because the client spawns the process, the `env` block in the JSON config injects variables into the server's memory before execution. This is the preferred method for Claude and Gemini CLI. For sandboxed agents (Antigravity), use a `.env` file instead (see below).
 
+> **Important: Running from Source:** When running the server directly from the cloned repository, you **must** include the `src` directory in your `PYTHONPATH` within the `env` block so Python can locate the `skill_swarm` package.
+
 ---
 
 #### Claude Code
@@ -194,7 +196,8 @@ Claude Code fully supports `type`, `command`, `args`, and `env` fields.
       "command": "/path/to/skill-swarm-mcp/.venv/bin/python",
       "args": ["-m", "skill_swarm.server"],
       "env": {
-        "SKILL_SWARM_GITHUB_TOKEN": "ghp_your_token_here"
+        "SKILL_SWARM_GITHUB_TOKEN": "ghp_your_token_here",
+        "PYTHONPATH": "/path/to/skill-swarm-mcp/src"
       }
     }
   }
@@ -210,7 +213,8 @@ Claude Code fully supports `type`, `command`, `args`, and `env` fields.
       "command": "/path/to/skill-swarm-mcp/.venv/bin/python",
       "args": ["-m", "skill_swarm.server"],
       "env": {
-        "SKILL_SWARM_GITHUB_TOKEN": "ghp_your_token_here"
+        "SKILL_SWARM_GITHUB_TOKEN": "ghp_your_token_here",
+        "PYTHONPATH": "/path/to/skill-swarm-mcp/src"
       }
     }
   }
@@ -232,7 +236,8 @@ Gemini CLI infers transport from the field used — `command` = stdio. No `type`
       "command": "/path/to/skill-swarm-mcp/.venv/bin/python",
       "args": ["-m", "skill_swarm.server"],
       "env": {
-        "SKILL_SWARM_GITHUB_TOKEN": "ghp_your_token_here"
+        "SKILL_SWARM_GITHUB_TOKEN": "ghp_your_token_here",
+        "PYTHONPATH": "/path/to/skill-swarm-mcp/src"
       }
     }
   }

@@ -50,6 +50,12 @@ class Settings(BaseSettings):
     model_config = {"env_prefix": "SKILL_SWARM_", "env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
     @property
+    def python_cmd(self) -> str:
+        """Return the best available python command (3.13 > 3.12)."""
+        import shutil
+        return shutil.which("python3.13") or shutil.which("python3.12") or "python3"
+
+    @property
     def manifest_path(self) -> Path:
         return self.skills_dir / self.manifest_file
 

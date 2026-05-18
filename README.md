@@ -5,7 +5,7 @@
 **MCP server for AI agent skill discovery, installation, and orchestration.**
 
 [![Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue?style=flat-square)](LICENSE)
-[![Python](https://img.shields.io/badge/Python-3.13+-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
+[![Python](https://img.shields.io/badge/Python-3.12+-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
 [![MCP](https://img.shields.io/badge/MCP-Protocol-black?style=flat-square)](https://modelcontextprotocol.io)
 [![9 Tools](https://img.shields.io/badge/Tools-9-green?style=flat-square)]()
 
@@ -82,7 +82,7 @@ graph TB
 
     subgraph Server["skill-swarm MCP Server"]
         direction TB
-        Tools["9 Tools · Python 3.13"]
+        Tools["9 Tools · Python 3.12+"]
         subgraph Core["Core Engines"]
             Matcher["Matcher V2<br/>BM25F + 7 signals"]
             Trust["Trust Engine<br/>5 dimensions · git-quality"]
@@ -152,7 +152,7 @@ sequenceDiagram
 
 ### Prerequisites
 
-- **Python 3.13+**
+- **Python 3.12+** (Supports 3.12 and 3.13)
 - **Git** (for cloning skill sources)
 - **GitHub token** (optional, for 5000 req/hr vs 60)
 
@@ -163,7 +163,7 @@ git clone https://github.com/ancrz/skill-swarm-mcp.git
 cd skill-swarm-mcp
 
 # Create virtual environment and install
-python3.13 -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
 

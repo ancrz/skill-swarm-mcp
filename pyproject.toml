@@ -2,7 +2,7 @@
 name = "skill-swarm"
 version = "1.0.0"
 description = "MCP server + skill controller for AI agent skill discovery, installation, and cherry-pick context extraction"
-requires-python = ">=3.13"
+requires-python = ">=3.12"
 dependencies = [
     "mcp[cli]>=1.9.0",
     "httpx>=0.28.0",

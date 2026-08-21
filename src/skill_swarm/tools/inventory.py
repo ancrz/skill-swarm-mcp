@@ -11,7 +11,7 @@ def list_skills(agent: str = "all") -> dict:
     """List all installed skills with their metadata, symlink status, and usage stats.
 
     Args:
-        agent: Filter by agent ("claude", "gemini") or "all" for everything.
+        agent: Filter by client ("claude", "agy", "codex") or "all".
 
     Returns:
         Dictionary with skills list, symlink health status, and usage.
@@ -23,20 +23,24 @@ def list_skills(agent: str = "all") -> dict:
     for name, info in manifest.skills.items():
         # Check symlink health
         symlink_status: dict[str, str] = {}
-        for agent_name, agent_dir in settings.agent_dirs.items():
-            if agent != "all" and agent_name != agent:
+        clients = [*settings.agent_dirs.keys(), *sorted(settings.native_agents)]
+        requested_agent = settings.agent_aliases.get(agent, agent)
+        for agent_name in clients:
+            if requested_agent != "all" and agent_name != requested_agent:
                 continue
-            link = agent_dir / name  # directory-level symlink
-            if link.is_symlink():
-                skill_file = link / "SKILL.md"
-                if skill_file.exists():
-                    symlink_status[agent_name] = "ok"
+            if agent_name in settings.native_agents:
+                symlink_status[agent_name] = "native" if settings.skill_path(name).exists() else "missing"
+                continue
+            statuses: list[str] = []
+            for agent_dir in settings.targets_for_agent(agent_name):
+                link = agent_dir / name
+                if link.is_symlink():
+                    statuses.append("ok" if (link / "SKILL.md").exists() else "broken")
+                elif link.exists():
+                    statuses.append("unmanaged")
                 else:
-                    symlink_status[agent_name] = "broken"
-            elif link.exists():
-                symlink_status[agent_name] = "directory (not symlink)"
-            else:
-                symlink_status[agent_name] = "missing"
+                    statuses.append("missing")
+            symlink_status[agent_name] = "ok" if statuses and all(s == "ok" for s in statuses) else ",".join(statuses)
 
         # Usage stats
         usage = all_usage.get(name)
@@ -124,12 +128,15 @@ def get_skill_info(name: str) -> dict:
 
     # Check symlinks (directory-level)
     symlinks: dict[str, str] = {}
-    for agent_name, agent_dir in settings.agent_dirs.items():
-        link = agent_dir / name
-        if link.is_symlink() and (link / "SKILL.md").exists():
+    for agent_name in [*settings.agent_dirs.keys(), *sorted(settings.native_agents)]:
+        if agent_name in settings.native_agents:
+            symlinks[agent_name] = "native" if skill_path.exists() else "missing"
+            continue
+        links = [agent_dir / name for agent_dir in settings.targets_for_agent(agent_name)]
+        if links and all(link.is_symlink() and (link / "SKILL.md").exists() for link in links):
             symlinks[agent_name] = "linked"
-        elif link.exists():
-            symlinks[agent_name] = "directory (not symlink)"
+        elif any(link.exists() and not link.is_symlink() for link in links):
+            symlinks[agent_name] = "unmanaged directory"
         else:
             symlinks[agent_name] = "not linked"
 

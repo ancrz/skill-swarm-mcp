@@ -1,10 +1,10 @@
 [project]
 name = "skill-swarm"
-version = "1.0.0"
+version = "1.1.0"
 description = "MCP server + skill controller for AI agent skill discovery, installation, and cherry-pick context extraction"
 requires-python = ">=3.12"
 dependencies = [
-    "mcp[cli]>=1.9.0",
+    "mcp>=2.0.0,<3",
     "httpx>=0.28.0",
     "pydantic>=2.10.0",
     "pydantic-settings>=2.7.0",

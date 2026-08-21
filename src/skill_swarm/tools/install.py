@@ -15,7 +15,7 @@ async def install_skill(
 ) -> InstallResult:
     """Download, validate, and install a skill globally.
 
-    Pipeline: download -> security scan -> install to ~/.agent/skills/ -> symlink to agent dirs.
+    Pipeline: download -> security scan -> install to ~/.agents/skills/ -> reconcile client discovery links.
 
     Args:
         name: Skill identifier (e.g. "pdf-parser")

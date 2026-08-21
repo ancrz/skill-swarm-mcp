@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "skill-swarm": {
-      "command": ".venv/bin/python",
-      "args": ["-m", "skill_swarm.server"]
-    }
-  }
-}

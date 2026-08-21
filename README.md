@@ -15,7 +15,7 @@
 
 ## The Problem
 
-AI agents (Claude, Gemini, Copilot) need skills to be effective. Today, finding and installing the right MCP server for a task is manual:
+AI agents (Claude, agy, Codex) need skills to be effective. Today, finding and installing the right skill for a task is manual:
 
 1. Search Smithery/GitHub manually
 2. Evaluate if the server is trustworthy (stars? license? maintained?)
@@ -38,9 +38,9 @@ flowchart TD
     F --> G["download"]
     G --> H["security scan"]
     H --> I["trust check"]
-    I --> J["install"]
-    J --> K["symlink"]
-    K --> L["~/.agent/skills/{name}/SKILL.md"]
+    I --> J["validate Agent Skills format"]
+    J --> L["atomic folder install<br/>~/.agents/skills/{name}/"]
+    L --> K["reconcile client discovery<br/>Claude · agy · Codex"]
     C --> M{Need partial context?}
     M -->|Yes| N[cherry_pick_context]
     M -->|No| O["📄 Full skill loaded"]
@@ -77,7 +77,7 @@ flowchart LR
 
 ```mermaid
 graph TB
-    Agent["🤖 AI Agent (Claude, Gemini)"]
+    Agent["🤖 AI Agent (Claude, agy, Codex)"]
     Agent -->|MCP Protocol stdio| Server
 
     subgraph Server["skill-swarm MCP Server"]
@@ -104,9 +104,14 @@ graph TB
         GitHub["GitHub (+token)"]
     end
 
-    subgraph Skills["~/.agent/skills/"]
-        SkillFile["{name}/SKILL.md"]
-        Symlinks["Symlinked to:<br/>~/.claude/skills/<br/>~/.gemini/skills/"]
+    subgraph Skills["Global Skill Discovery"]
+        Canonical["~/.agents/skills/{name}/<br/>SKILL.md · scripts · references · assets"]
+        ClaudeLinks["~/.claude/skills/{name}<br/>managed symlink"]
+        AgyLinks["agy global skill paths<br/>managed symlinks"]
+        CodexNative["Codex<br/>reads canonical source"]
+        Canonical --> ClaudeLinks
+        Canonical --> AgyLinks
+        Canonical --> CodexNative
     end
 
     style Agent fill:#8B5CF6,stroke:#6D28D9,color:#fff
@@ -116,7 +121,10 @@ graph TB
     style Trust fill:#3B82F6,stroke:#2563EB,color:#fff
     style Cache fill:#475569,stroke:#64748B,color:#fff
     style Usage fill:#475569,stroke:#64748B,color:#fff
-    style Skills fill:#10B981,stroke:#059669,color:#fff
+    style Canonical fill:#10B981,stroke:#059669,color:#fff
+    style ClaudeLinks fill:#E1F5EE,stroke:#0F6E56,color:#04342C
+    style AgyLinks fill:#E1F5EE,stroke:#0F6E56,color:#04342C
+    style CodexNative fill:#E1F5EE,stroke:#0F6E56,color:#04342C
 ```
 
 ### Install Pipeline
@@ -130,7 +138,7 @@ sequenceDiagram
     participant FS as Filesystem
 
     A->>S: install_skill("pdf-parser", url)
-    S->>S: Download source
+    S->>S: Download complete skill folder
     S->>S: Security scan (pattern matching)
     alt scan fails
         S-->>A: ❌ Blocked (security_score < 0.5)
@@ -138,9 +146,10 @@ sequenceDiagram
     S->>G: GET /repos/{owner}/{repo}
     G-->>S: stars, license, pushed_at, archived
     S->>S: Compute trust score (5 dimensions)
-    S->>FS: Write ~/.agent/skills/pdf-parser/SKILL.md
-    S->>FS: Symlink ~/.claude/skills/pdf-parser → source
-    S->>FS: Symlink ~/.gemini/skills/pdf-parser → source
+    S->>S: Validate SKILL.md frontmatter
+    S->>FS: Stage and atomically install complete folder
+    S->>FS: Reconcile Claude and agy managed symlinks
+    S->>FS: Confirm Codex native canonical discovery
     S->>S: Update manifest.json + usage tracker
     S->>S: Purge search cache
     S-->>A: ✅ InstallResult (path, agents, scores)
@@ -152,7 +161,7 @@ sequenceDiagram
 
 ### Prerequisites
 
-- **Python 3.12+** (Supports 3.12 and 3.13)
+- **Python 3.12+** (validated with Python 3.14 in Ubuntu under PRoot)
 - **Git** (for cloning skill sources)
 - **GitHub token** (optional, for 5000 req/hr vs 60)
 
@@ -172,129 +181,74 @@ cp .env.example .env
 # Edit .env and add your GitHub token
 ```
 
-### Configure Your AI Agent
+### Configure Your AI Agent Globally
 
 Skill Swarm uses **stdio** transport — the AI client launches the Python process and communicates via stdin/stdout. This means the client is responsible for starting the server and passing environment variables.
 
-> **How secrets work with stdio:** Because the client spawns the process, the `env` block in the JSON config injects variables into the server's memory before execution. This is the preferred method for Claude and Gemini CLI. For sandboxed agents (Antigravity), use a `.env` file instead (see below).
+> **How secrets work with stdio:** The client launches the MCP process. Keep the GitHub token in the client environment or in a private wrapper; do not commit it to this repository.
 
-> **Important: Running from Source:** When running the server directly from the cloned repository, you **must** include the `src` directory in your `PYTHONPATH` within the `env` block so Python can locate the `skill_swarm` package.
+Install the package with `pip install -e .` first. The editable installation makes
+`PYTHONPATH` unnecessary and lets the clients start the server from any directory.
+Use one persistent virtual environment and register its absolute Python path in
+each client; do not add a project `.mcp.json`, because it would shadow or conflict
+with the global registration.
 
 ---
 
 #### Claude Code
 
-Claude Code fully supports `type`, `command`, `args`, and `env` fields.
-
-**Global** (`~/.claude.json`):
-
-```json
-{
-  "mcpServers": {
-    "skill-swarm": {
-      "type": "stdio",
-      "command": "/path/to/skill-swarm-mcp/.venv/bin/python",
-      "args": ["-m", "skill_swarm.server"],
-      "env": {
-        "SKILL_SWARM_GITHUB_TOKEN": "ghp_your_token_here",
-        "PYTHONPATH": "/path/to/skill-swarm-mcp/src"
-      }
-    }
-  }
-}
-```
-
-**Project-level** (`.mcp.json` in your project root):
-
-```json
-{
-  "mcpServers": {
-    "skill-swarm": {
-      "command": "/path/to/skill-swarm-mcp/.venv/bin/python",
-      "args": ["-m", "skill_swarm.server"],
-      "env": {
-        "SKILL_SWARM_GITHUB_TOKEN": "ghp_your_token_here",
-        "PYTHONPATH": "/path/to/skill-swarm-mcp/src"
-      }
-    }
-  }
-}
-```
-
----
-
-#### Gemini CLI
-
-Gemini CLI infers transport from the field used — `command` = stdio. No `type` field needed. The `env` block works and supports `$VAR` / `${VAR}` substitution from host environment.
-
-**Config file:** `~/.gemini/settings.json`
-
-```json
-{
-  "mcpServers": {
-    "skill-swarm": {
-      "command": "/path/to/skill-swarm-mcp/.venv/bin/python",
-      "args": ["-m", "skill_swarm.server"],
-      "env": {
-        "SKILL_SWARM_GITHUB_TOKEN": "ghp_your_token_here",
-        "PYTHONPATH": "/path/to/skill-swarm-mcp/src"
-      }
-    }
-  }
-}
-```
-
-> **Note:** Omit `"type": "stdio"` — Gemini CLI infers it from `command`. Adding it may cause validation errors on older CLI versions.
-
----
-
-#### Antigravity
-
-Antigravity runs agents in a **sandboxed environment** (Docker or local). If the agent doesn't have your home directory mounted, absolute paths to the Python binary will fail. Additionally, `env` injection from the JSON may be restricted in sandboxed mode.
-
-**Recommended approach:** Put the GitHub token in the `.env` file inside the skill-swarm directory so the server reads it from disk (Pydantic Settings loads `.env` automatically):
+Register it in the user scope:
 
 ```bash
-# /path/to/skill-swarm-mcp/.env
-SKILL_SWARM_GITHUB_TOKEN=ghp_your_token_here
+claude mcp add --scope user skill-swarm \
+  -e SKILL_SWARM_ENV_FILE="$HOME/.env" \
+  -- /absolute/path/to/.venv/bin/python -m skill_swarm.server
 ```
 
-**Config file:** `~/.gemini/antigravity/mcp_config.json`
+---
 
-```json
-{
-  "mcpServers": {
-    "skill-swarm": {
-      "command": "/path/to/skill-swarm-mcp/.venv/bin/python",
-      "args": ["-m", "skill_swarm.server"]
-    }
-  }
-}
+#### Antigravity CLI (`agy`)
+
+`agy` stores global MCP servers in `~/.gemini/config/mcp_config.json`.
+
+Register it with the CLI:
+
+```bash
+agy mcp add --env SKILL_SWARM_ENV_FILE="$HOME/.env" \
+  skill-swarm /absolute/path/to/.venv/bin/python -m skill_swarm.server
 ```
 
-> **Note:** No `env` block — the server reads credentials from its `.env` file. Make sure the path to the Python binary is accessible from the agent's execution context.
+---
+
+#### Codex
+
+Codex stores global MCP configuration in `~/.codex/config.toml`:
+
+```bash
+codex mcp add --env SKILL_SWARM_ENV_FILE="$HOME/.env" \
+  skill-swarm -- /absolute/path/to/.venv/bin/python -m skill_swarm.server
+```
 
 ---
 
 #### Quick Comparison
 
-|                    | Claude Code                     | Gemini CLI                     | Antigravity                             |
-| ------------------ | ------------------------------- | ------------------------------ | --------------------------------------- |
-| **Config file**    | `~/.claude.json` or `.mcp.json` | `~/.gemini/settings.json`      | `~/.gemini/antigravity/mcp_config.json` |
-| **Transport**      | `"type": "stdio"` (explicit)    | Inferred from `command`        | Inferred from `command`                 |
-| **`env` in JSON**  | Yes                             | Yes (with `$VAR` substitution) | Possible but prefer `.env` file         |
-| **`type` field**   | Supported                       | Omit (inferred)                | Not used                                |
-| **Secrets method** | `env` block in JSON             | `env` block in JSON            | `.env` file on disk                     |
+| Client | Global MCP configuration | Global skill discovery |
+| --- | --- | --- |
+| Claude Code | User-scoped `claude mcp add --scope user` | `~/.claude/skills/` |
+| Antigravity CLI (`agy`) | `~/.gemini/config/mcp_config.json` | `~/.gemini/config/skills/` |
+| Codex | `~/.codex/config.toml` | `~/.agents/skills/` |
 
 ### Verify
 
 ```bash
-# Run tests
-.venv/bin/python tests/test_core.py
+# Unit tests
+.venv/bin/python -m pytest -q tests/test_core.py
 
-# Test the MCP server responds
-echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}' | \
-  .venv/bin/python -m skill_swarm.server
+# Confirm each global client sees the server
+claude mcp list
+agy mcp list
+codex mcp list
 ```
 
 ---
@@ -319,10 +273,10 @@ See [TOOLS.md](TOOLS.md) for complete parameter reference and examples.
 
 ## Skill Directory Compliance
 
-Skills follow the `.agent` standard for cross-agent compatibility:
+Skills follow the Agent Skills standard with one user-global source:
 
 ```
-~/.agent/skills/                    # Global source of truth
+~/.agents/skills/                   # Global source; Codex reads it directly
 ├── {skill-name}/
 │   └── SKILL.md                    # Skill content (always SKILL.md)
 ├── manifest.json                   # Installed skills registry
@@ -330,18 +284,22 @@ Skills follow the `.agent` standard for cross-agent compatibility:
 └── .cache/                         # TTL-based search/trust cache
 
 ~/.claude/skills/                   # Agent-specific (symlinks)
-├── {skill-name} -> ~/.agent/skills/{skill-name}
+├── {skill-name} -> ~/.agents/skills/{skill-name}
 └── ...
 
-~/.gemini/skills/                   # Agent-specific (symlinks)
-├── {skill-name} -> ~/.agent/skills/{skill-name}
+~/.gemini/config/skills/            # agy current global path (symlinks)
+├── {skill-name} -> ~/.agents/skills/{skill-name}
+└── ...
+
+~/.gemini/antigravity-cli/skills/  # agy migration compatibility
+├── {skill-name} -> ~/.agents/skills/{skill-name}
 └── ...
 ```
 
 - The **folder name** identifies the skill
 - The **file** is always `SKILL.md` (standard compliance)
 - Agent directories contain **directory symlinks** to the global source
-- Any agent that follows the `.agent/skills/` convention can consume skills
+- Legacy `~/.agent/skills/` content is migrated without overwriting conflicts
 
 ---
 
@@ -448,19 +406,19 @@ Python's `os.symlink()` works natively on Windows when the above permissions are
 
 ```powershell
 # PowerShell
-New-Item -ItemType SymbolicLink -Path "$HOME\.claude\skills\my-skill" -Target "$HOME\.agent\skills\my-skill"
+New-Item -ItemType SymbolicLink -Path "$HOME\.claude\skills\my-skill" -Target "$HOME\.agents\skills\my-skill"
 
 # Command Prompt (Administrator)
-mklink /D "%USERPROFILE%\.claude\skills\my-skill" "%USERPROFILE%\.agent\skills\my-skill"
+mklink /D "%USERPROFILE%\.claude\skills\my-skill" "%USERPROFILE%\.agents\skills\my-skill"
 ```
 
 **AI Agent Compatibility:**
 
-| Agent             | Integration                   | Symlink Dir         |
-| ----------------- | ----------------------------- | ------------------- |
-| **Claude Code**   | MCP stdio                     | `~/.claude/skills/` |
-| **Gemini**        | MCP stdio                     | `~/.gemini/skills/` |
-| **Custom agents** | Add to `agent_dirs` in config | Configurable        |
+| Client | Integration | Skill directory |
+| --- | --- | --- |
+| **Claude Code** | MCP stdio + symlinks | `~/.claude/skills/` |
+| **agy** | MCP stdio + symlinks | `~/.gemini/config/skills/` |
+| **Codex** | MCP stdio + native source | `~/.agents/skills/` |
 
 ---
 
@@ -487,9 +445,9 @@ All settings are loaded from environment variables (prefix: `SKILL_SWARM_`):
 ## Project Structure
 
 ```
-skill-swarm/
+skill-swarm-mcp/
 ├── src/skill_swarm/
-│   ├── server.py              # FastMCP entry point (9 tools)
+│   ├── server.py              # MCPServer entry point (9 tools)
 │   ├── config.py              # Pydantic Settings + path helpers
 │   ├── models.py              # Data models (SkillInfo, TrustScore, etc.)
 │   ├── core/
@@ -514,15 +472,15 @@ skill-swarm/
 │   ├── SKILL.md               # Self-describing skill file
 │   └── references/            # Skill reference docs
 ├── tests/
-│   ├── test_core.py           # Unit tests (8)
+│   ├── test_core.py           # Unit tests (25)
 │   ├── test_e2e_effectiveness.py  # E2E V1 (19 tests)
-│   └── test_e2e_v2.py         # E2E V2 — trust, cache, BM25F (15 tests)
+│   └── test_e2e_v2.py         # E2E V2 — trust, cache, BM25F (19 tests)
 ├── LICENSE                    # Apache 2.0
 ├── README.md                  # This file
 ├── TOOLS.md                   # Complete tool reference
 ├── pyproject.toml             # Python package config
+├── uv.lock                    # Reproducible dependency lock
 ├── .env.example               # Environment template
-├── .mcp.json                  # MCP server config
 └── .gitignore
 ```
 

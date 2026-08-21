@@ -42,7 +42,7 @@ Call `search_skills(query, scope="remote")` with keywords describing the needed 
 ### Step 3: Install or Skip
 
 If a suitable remote skill is found:
-- Call `install_skill(name, source, agents="claude,gemini")` to install globally
+- Call `install_skill(name, source, agents="claude,agy,codex")` to install globally
 - The installation pipeline handles security scanning automatically
 - If the scan fails, the skill is NOT installed (blocked)
 - After installation, the skill is available to all configured agents via symlinks
@@ -63,18 +63,21 @@ This extracts only the requested sections without loading the entire skill into 
 
 ### Global Installation with Symlinks
 
-Skills are installed once to `~/.agent/skills/` (source of truth) and served to each AI model via symlinks:
+Skills are installed once to `~/.agents/skills/` (source of truth and Codex user scope) and served to other clients via symlinks:
 
 ```
-~/.agent/skills/               ← Source of truth (agent-agnostic)
+~/.agents/skills/              ← Source of truth; native Codex user scope
 ├── {skill-name}/
 │   └── SKILL.md
 
 ~/.claude/skills/              ← Symlink for Claude
-├── {skill-name} → ~/.agent/skills/{skill-name}
+├── {skill-name} → ~/.agents/skills/{skill-name}
 
-~/.gemini/skills/              ← Symlink for Gemini
-├── {skill-name} → ~/.agent/skills/{skill-name}
+~/.gemini/config/skills/       ← Current global symlink for agy
+├── {skill-name} → ~/.agents/skills/{skill-name}
+
+~/.gemini/antigravity-cli/skills/ ← agy migration-compatible symlink
+├── {skill-name} → ~/.agents/skills/{skill-name}
 ```
 
 ### MCP Tools Available

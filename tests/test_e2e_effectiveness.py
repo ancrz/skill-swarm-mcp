@@ -6,7 +6,7 @@ metrics for fine-tuning the project.
 Ontological approach:
 - Vertical: config → core → tools → server (dependency chain)
 - Horizontal: search ↔ install ↔ inventory (peer operations)
-- Co-dependencies: manifest.json, ~/.agent/skills/, symlinks
+- Co-dependencies: manifest.json, ~/.agents/skills/, symlinks
 """
 
 import asyncio
@@ -219,22 +219,22 @@ Check logs if something fails.
     result = asyncio.run(install_skill(
         name="test-e2e-skill",
         source=str(tmp_skill),
-        agents=["claude", "gemini"],
+        agents=["claude", "agy", "codex"],
     ))
     elapsed = (time.monotonic() - start) * 1000
 
     # Verify installation (subdirectory structure)
     skill_exists = settings.skill_path("test-e2e-skill").exists()
-    claude_link = (settings.agent_dirs["claude"] / "test-e2e-skill").is_symlink()
-    gemini_link = (settings.agent_dirs["gemini"] / "test-e2e-skill").is_symlink()
+    claude_link = (settings.agent_dirs["claude"][0] / "test-e2e-skill").is_symlink()
+    agy_links = all((target / "test-e2e-skill").is_symlink() for target in settings.agent_dirs["agy"])
     in_manifest = "test-e2e-skill" in load_manifest().skills
 
-    passed = result.success and skill_exists and claude_link and gemini_link and in_manifest
+    passed = result.success and skill_exists and claude_link and agy_links and "codex" in result.agents_linked and in_manifest
     metrics.record("UC3: install from file", passed, elapsed, {
         "success": result.success,
         "skill_exists": skill_exists,
         "claude_symlink": claude_link,
-        "gemini_symlink": gemini_link,
+        "agy_symlinks": agy_links,
         "in_manifest": in_manifest,
         "security_score": result.security_score,
         "errors": result.errors,
@@ -274,12 +274,11 @@ def test_uc3c_install_malicious_blocked():
     stale_dir = settings.skill_dir("evil-skill")
     if stale_dir.exists():
         shutil.rmtree(stale_dir, ignore_errors=True)
-    for agent_dir in settings.agent_dirs.values():
-        link = agent_dir / "evil-skill"
-        if link.is_symlink():
-            link.unlink()
-        elif link.exists():
-            shutil.rmtree(link, ignore_errors=True)
+    for agent_dirs in settings.agent_dirs.values():
+        for agent_dir in agent_dirs:
+            link = agent_dir / "evil-skill"
+            if link.is_symlink():
+                link.unlink()
     manifest = load_manifest()
     manifest.skills.pop("evil-skill", None)
     save_manifest(manifest)
@@ -332,16 +331,16 @@ def test_uc3d_uninstall():
     elapsed = (time.monotonic() - start) * 1000
 
     skill_gone = not settings.skill_dir("test-e2e-skill").exists()
-    claude_gone = not (settings.agent_dirs["claude"] / "test-e2e-skill").exists()
-    gemini_gone = not (settings.agent_dirs["gemini"] / "test-e2e-skill").exists()
+    claude_gone = not (settings.agent_dirs["claude"][0] / "test-e2e-skill").exists()
+    agy_gone = all(not (target / "test-e2e-skill").exists() for target in settings.agent_dirs["agy"])
     manifest_clean = "test-e2e-skill" not in load_manifest().skills
 
-    passed = result.success and skill_gone and claude_gone and gemini_gone and manifest_clean
+    passed = result.success and skill_gone and claude_gone and agy_gone and manifest_clean
     metrics.record("UC3d: uninstall complete", passed, elapsed, {
         "success": result.success,
         "skill_removed": skill_gone,
         "claude_unlinked": claude_gone,
-        "gemini_unlinked": gemini_gone,
+        "agy_unlinked": agy_gone,
         "manifest_clean": manifest_clean,
         "verdict": "UNINSTALLED" if passed else "UNINSTALL_INCOMPLETE",
     })
@@ -436,7 +435,7 @@ def test_uc5_list_skills():
 
     total = result.get("total", 0)
     has_skill_swarm = any(s["name"] == "skill-swarm" for s in result.get("skills", []))
-    skills_dir_correct = ".agent/skills" in result.get("skills_dir", "")
+    skills_dir_correct = ".agents/skills" in result.get("skills_dir", "")
 
     passed = total >= 1 and has_skill_swarm and skills_dir_correct
     metrics.record("UC5: list skills", passed, elapsed, {
@@ -481,7 +480,7 @@ def test_uc5c_get_skill_info():
 
     has_content = len(result.get("content", "")) > 100
     has_symlinks = "claude" in result.get("symlinks", {})
-    has_path = ".agent/skills" in result.get("path", "")
+    has_path = ".agents/skills" in result.get("path", "")
 
     passed = has_content and has_symlinks and has_path
     metrics.record("UC5c: get skill info", passed, elapsed, {
@@ -563,4 +562,3 @@ def test_uc6_scanner_patterns():
 # ============================================================================
 # MAIN: RUN ALL TESTS AND GENERATE EFFECTIVENESS REPORT
 # ============================================================================
-

@@ -223,7 +223,7 @@ Download, security-scan, trust-check, and install a skill globally with agent sy
 ### Pipeline
 
 ```
-download source → security scan → trust check → install to ~/.agent/skills/{name}/SKILL.md → symlink to agents → update manifest
+download source → security scan → trust check → install to ~/.agents/skills/{name}/SKILL.md → reconcile client discovery → update manifest
 ```
 
 ### Parameters
@@ -232,7 +232,7 @@ download source → security scan → trust check → install to ~/.agent/skills
 | --------- | -------- | ----------------- | -------------------------------------------------- |
 | `name`    | `string` | _(required)_      | Skill identifier (e.g. `"pdf-parser"`)             |
 | `source`  | `string` | _(required)_      | URL (markdown, GitHub repo) or local path          |
-| `agents`  | `string` | `"claude,gemini"` | Comma-separated agent names to create symlinks for |
+| `agents`  | `string` | `"claude,agy,codex"` | Comma-separated global clients; `gemini` aliases to `agy` |
 
 ### Accepted Source Formats
 
@@ -251,8 +251,8 @@ JSON `InstallResult` object:
 {
   "skill_name": "pdf-parser",
   "success": true,
-  "install_path": "/home/user/.agent/skills/pdf-parser/SKILL.md",
-  "agents_linked": ["claude", "gemini"],
+  "install_path": "/home/user/.agents/skills/pdf-parser/SKILL.md",
+  "agents_linked": ["claude", "agy", "codex"],
   "security_score": 0.95,
   "trust_score": 0.78,
   "errors": []
@@ -286,22 +286,25 @@ Minimum security score to allow installation: **0.5** (configurable via `SKILL_S
 ### Directory Structure After Install
 
 ```
-~/.agent/skills/
+~/.agents/skills/
 └── pdf-parser/
     └── SKILL.md              ← Installed file
 
 ~/.claude/skills/
-└── pdf-parser -> ~/.agent/skills/pdf-parser   ← Directory symlink
+└── pdf-parser -> ~/.agents/skills/pdf-parser  ← Directory symlink
 
-~/.gemini/skills/
-└── pdf-parser -> ~/.agent/skills/pdf-parser   ← Directory symlink
+~/.gemini/config/skills/
+└── pdf-parser -> ~/.agents/skills/pdf-parser  ← agy directory symlink
+
+~/.gemini/antigravity-cli/skills/
+└── pdf-parser -> ~/.agents/skills/pdf-parser  ← agy compatibility symlink
 ```
 
 ### Side Effects
 
 - Purges search cache (inventory changed)
 - Records `installed_at` timestamp in usage tracker
-- Updates global manifest at `~/.agent/skills/manifest.json`
+- Updates global manifest at `~/.agents/skills/manifest.json`
 
 ### Examples
 
@@ -313,7 +316,7 @@ install_skill("dbhub", "https://github.com/bytebase/dbhub")
 install_skill("my-tool", "https://example.com/tool.md", agents="claude")
 
 # Install from local file
-install_skill("custom-skill", "/home/user/my-skill.md", agents="claude,gemini")
+install_skill("custom-skill", "/home/user/my-skill.md", agents="claude,agy,codex")
 ```
 
 ---
@@ -346,15 +349,15 @@ JSON `InstallResult` object:
 
 ### What Gets Removed
 
-1. Skill directory: `~/.agent/skills/{name}/` (entire directory tree)
-2. Agent symlinks: `~/.claude/skills/{name}`, `~/.gemini/skills/{name}`
-3. Manifest entry in `~/.agent/skills/manifest.json`
+1. Skill directory: `~/.agents/skills/{name}/` (entire directory tree)
+2. Managed Claude and agy symlinks that point to the canonical directory
+3. Manifest entry in `~/.agents/skills/manifest.json`
 4. Usage tracking data for the skill
 
 ### Side Effects
 
 - Purges search cache (inventory changed)
-- Removes usage stats from `~/.agent/skills/.usage.json`
+- Removes usage stats from `~/.agents/skills/.usage.json`
 
 ### Examples
 
@@ -389,8 +392,8 @@ JSON `InstallResult` object:
 {
   "skill_name": "pdf-parser",
   "success": true,
-  "install_path": "/home/user/.agent/skills/pdf-parser/SKILL.md",
-  "agents_linked": ["claude", "gemini"],
+  "install_path": "/home/user/.agents/skills/pdf-parser/SKILL.md",
+  "agents_linked": ["claude", "agy", "codex"],
   "security_score": 0.95,
   "trust_score": null,
   "errors": []
@@ -403,7 +406,7 @@ If content is already up to date:
 {
   "skill_name": "pdf-parser",
   "success": true,
-  "install_path": "/home/user/.agent/skills/pdf-parser/SKILL.md",
+  "install_path": "/home/user/.agents/skills/pdf-parser/SKILL.md",
   "agents_linked": [],
   "security_score": 0.95,
   "trust_score": null,
@@ -458,14 +461,14 @@ List all installed skills with metadata, symlink health status, usage stats, and
 
 | Parameter | Type     | Default | Description                                              |
 | --------- | -------- | ------- | -------------------------------------------------------- |
-| `agent`   | `string` | `"all"` | Filter by agent name (`"claude"`, `"gemini"`) or `"all"` |
+| `agent`   | `string` | `"all"` | Filter by client name (`"claude"`, `"agy"`, `"codex"`) or `"all"`; legacy `"gemini"` aliases to `"agy"` |
 
 ### Returns
 
 ```json
 {
   "total": 3,
-  "skills_dir": "/home/user/.agent/skills",
+  "skills_dir": "/home/user/.agents/skills",
   "dead_skills": ["unused-tool"],
   "skills": [
     {
@@ -473,10 +476,11 @@ List all installed skills with metadata, symlink health status, usage stats, and
       "description": "Docker container management",
       "version": "1.0.0",
       "source": "https://github.com/example/docker-ops",
-      "agents": ["claude", "gemini"],
+      "agents": ["claude", "agy", "codex"],
       "symlinks": {
         "claude": "ok",
-        "gemini": "ok"
+        "agy": "ok",
+        "codex": "native"
       },
       "usage": {
         "primary_usage": "full",
@@ -532,7 +536,7 @@ Calling this tool counts as a **full_read** in usage tracking.
 ```json
 {
   "name": "docker-ops",
-  "path": "/home/user/.agent/skills/docker-ops/SKILL.md",
+  "path": "/home/user/.agents/skills/docker-ops/SKILL.md",
   "size_bytes": 4523,
   "content": "---\nname: docker-ops\n...\n# Docker Operations\n...",
   "description": "Docker container management and deployment",
@@ -541,7 +545,8 @@ Calling this tool counts as a **full_read** in usage tracking.
   "source": "https://github.com/example/docker-ops",
   "symlinks": {
     "claude": "linked",
-    "gemini": "linked"
+    "agy": "linked",
+    "codex": "native"
   },
   "usage": {
     "primary_usage": "full",
@@ -567,7 +572,7 @@ If the skill is not found:
 
 ```json
 {
-  "error": "Skill 'unknown-skill' not found at /home/user/.agent/skills/unknown-skill/SKILL.md"
+  "error": "Skill 'unknown-skill' not found at /home/user/.agents/skills/unknown-skill/SKILL.md"
 }
 ```
 
@@ -642,7 +647,7 @@ If the skill is not found:
 
 ```json
 {
-  "error": "Skill 'unknown-skill' not found at /home/user/.agent/skills/unknown-skill/SKILL.md"
+  "error": "Skill 'unknown-skill' not found at /home/user/.agents/skills/unknown-skill/SKILL.md"
 }
 ```
 
@@ -676,7 +681,7 @@ None.
   "total_tracked": 5,
   "dead_skills": ["unused-tool"],
   "cache": {
-    "cache_dir": "/home/user/.agent/skills/.cache",
+    "cache_dir": "/home/user/.agents/skills/.cache",
     "total_entries": 12,
     "expired_entries": 3,
     "active_entries": 9,
@@ -752,7 +757,7 @@ Metadata stored in the global manifest for each installed skill.
 | `version`        | `string`   | `"0.1.0"`              | Semantic version                   |
 | `tags`           | `string[]` | `[]`                   | Categorization tags                |
 | `source`         | `string`   | `""`                   | URL or registry where it was found |
-| `agents`         | `string[]` | `["claude", "gemini"]` | Agents this skill is linked to     |
+| `agents`         | `string[]` | `["claude", "agy", "codex"]` | Global clients receiving the skill |
 | `installed_path` | `string`   | `""`                   | Filesystem path of installation    |
 
 ### TrustScore

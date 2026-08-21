@@ -1,5 +1,6 @@
 """Configuration for skill-swarm MCP server."""
 
+import os
 from pathlib import Path
 
 from pydantic_settings import BaseSettings
@@ -8,14 +9,24 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     """Skill-swarm configuration loaded from environment and .env file."""
 
-    # Global skills directory (source of truth) — hidden for cleanliness
-    skills_dir: Path = Path.home() / ".agent" / "skills"
+    # Agent Skills standard user scope. Codex discovers this directory
+    # directly, so it is also the global source of truth.
+    skills_dir: Path = Path.home() / ".agents" / "skills"
+    legacy_skills_dir: Path = Path.home() / ".agent" / "skills"
 
-    # Agent-specific skill directories (symlink targets)
-    agent_dirs: dict[str, Path] = {
-        "claude": Path.home() / ".claude" / "skills",
-        "gemini": Path.home() / ".gemini" / "skills",
+    # Client-specific discovery directories. Each installed skill directory is
+    # symlinked from these paths back to skills_dir. Codex is not listed here:
+    # it consumes skills_dir natively.
+    agent_dirs: dict[str, list[Path]] = {
+        "claude": [Path.home() / ".claude" / "skills"],
+        "agy": [
+            Path.home() / ".gemini" / "config" / "skills",
+            Path.home() / ".gemini" / "antigravity-cli" / "skills",
+        ],
     }
+
+    native_agents: set[str] = {"codex"}
+    agent_aliases: dict[str, str] = {"gemini": "agy", "antigravity": "agy"}
 
     # Manifest file for tracking installed skills
     manifest_file: str = "manifest.json"
@@ -71,5 +82,21 @@ class Settings(BaseSettings):
         """Return the canonical path: skills_dir/{name}/SKILL.md"""
         return self.skills_dir / name / "SKILL.md"
 
+    def normalize_agents(self, agents: list[str] | None = None) -> list[str]:
+        """Normalize legacy names and return unique supported clients."""
+        requested = agents or [*self.agent_dirs.keys(), *sorted(self.native_agents)]
+        normalized: list[str] = []
+        for agent in requested:
+            canonical = self.agent_aliases.get(agent.strip().lower(), agent.strip().lower())
+            if canonical in self.agent_dirs or canonical in self.native_agents:
+                if canonical not in normalized:
+                    normalized.append(canonical)
+        return normalized
 
-settings = Settings()
+    def targets_for_agent(self, agent: str) -> list[Path]:
+        """Return filesystem discovery targets for a normalized client."""
+        canonical = self.agent_aliases.get(agent, agent)
+        return self.agent_dirs.get(canonical, [])
+
+
+settings = Settings(_env_file=os.getenv("SKILL_SWARM_ENV_FILE", ".env"))

@@ -15,14 +15,14 @@ Provides 9 tools for AI agent skill management:
 import json
 import logging
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server import MCPServer
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 
-mcp = FastMCP(
+mcp = MCPServer(
     "skill-swarm",
     instructions=(
         "Skill Swarm manages AI agent skills globally. "
@@ -37,9 +37,14 @@ mcp = FastMCP(
 )
 
 # Startup migration: rename any legacy skill.md files to SKILL.md
-from skill_swarm.core.installer import normalize_skill_filenames
+from skill_swarm.core.installer import migrate_legacy_skills_dir, normalize_skill_filenames
 
+_legacy_migrated = migrate_legacy_skills_dir()
 _migrated = normalize_skill_filenames()
+if _legacy_migrated:
+    logging.getLogger("skill-swarm").info(
+        "Startup migration: moved %d entries to ~/.agents/skills", _legacy_migrated
+    )
 if _migrated:
     logging.getLogger("skill-swarm").info(
         "Startup migration: renamed %d skill files to SKILL.md", _migrated
@@ -81,7 +86,7 @@ async def match_skills(task_description: str, threshold: float = 0.05) -> str:
 
 
 @mcp.tool()
-async def install_skill(name: str, source: str, agents: str = "claude,gemini") -> str:
+async def install_skill(name: str, source: str, agents: str = "claude,agy,codex") -> str:
     """Download, security-scan, and install a skill globally with agent symlinks.
 
     Pipeline: download -> security scan -> atomic install -> symlink -> manifest.
@@ -90,7 +95,8 @@ async def install_skill(name: str, source: str, agents: str = "claude,gemini") -
     Args:
         name: Skill identifier (e.g. "pdf-parser")
         source: URL (markdown, zip, GitHub repo) or local path
-        agents: Comma-separated agent names to link (default: "claude,gemini")
+        agents: Comma-separated clients (default: "claude,agy,codex").
+            Legacy "gemini" is accepted as an alias for "agy".
     """
     from skill_swarm.tools.install import install_skill as _install
 

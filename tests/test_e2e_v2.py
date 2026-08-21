@@ -12,6 +12,7 @@ Tests the 7 improvements:
 import asyncio
 import json
 import time
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -81,9 +82,13 @@ def test_uc7_trust_dimensions():
     """UC7: Trust dimension formulas produce correct ranges."""
     start = time.monotonic()
 
-    # Recency: recent push = high, old push = low
-    recent = score_recency("2026-02-18T10:00:00Z", "2024-01-01T00:00:00Z")
-    old = score_recency("2023-01-01T00:00:00Z", "2022-01-01T00:00:00Z")
+    now = datetime.now(timezone.utc)
+    iso = lambda delta: (now - delta).isoformat().replace("+00:00", "Z")
+
+    # Recency: a push this week is high; a three-year-old push is low.
+    recent_push = iso(timedelta(days=7))
+    recent = score_recency(recent_push, iso(timedelta(days=730)))
+    old = score_recency(iso(timedelta(days=1095)), iso(timedelta(days=1460)))
     assert 0.8 <= recent <= 1.0, f"recent={recent}"
     assert old < 0.3, f"old={old}"
 
@@ -94,8 +99,8 @@ def test_uc7_trust_dimensions():
     assert empty == 0.0
 
     # Maintenance: active, not archived
-    active = score_maintenance(5, "2026-02-18T10:00:00Z", False)
-    archived = score_maintenance(100, "2024-01-01T00:00:00Z", True)
+    active = score_maintenance(5, recent_push, False)
+    archived = score_maintenance(100, iso(timedelta(days=730)), True)
     assert active > 0.5
     assert archived < 0.1
 
@@ -691,4 +696,3 @@ def test_uc14_normalized_vs_raw_query():
 # ============================================================================
 # MAIN
 # ============================================================================
-

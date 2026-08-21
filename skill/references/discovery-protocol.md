@@ -65,15 +65,15 @@ search_skills(query="<keywords>", scope="remote", limit=5)
 ### Tool Call
 
 ```
-install_skill(name="skill-name", source="<url>", agents="claude,gemini")
+install_skill(name="skill-name", source="<url>", agents="claude,agy,codex")
 ```
 
 ### What Happens Internally
 
 1. Download to temporary directory
 2. Pattern-based security scan
-3. If scan passes: atomic move to `~/agents/skills/`
-4. Create symlinks to `~/.claude/skills/` and `~/.gemini/skills/`
+3. If scan passes: install to `~/.agents/skills/` (Codex user scope)
+4. Create global symlinks for Claude and agy
 5. Update `manifest.json`
 
 ### Handling Failures

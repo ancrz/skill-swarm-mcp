@@ -11,7 +11,7 @@ class SkillInfo(BaseModel):
     version: str = "0.1.0"
     tags: list[str] = Field(default_factory=list)
     source: str = ""  # URL or registry name where it was found
-    agents: list[str] = Field(default_factory=lambda: ["claude", "gemini"])
+    agents: list[str] = Field(default_factory=lambda: ["claude", "agy", "codex"])
     installed_path: str = ""
 
 

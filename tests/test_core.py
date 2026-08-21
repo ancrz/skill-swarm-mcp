@@ -144,7 +144,7 @@ def test_create_symlinks():
 
         # Temporarily override settings
         original = settings.agent_dirs.copy()
-        settings.agent_dirs["test-agent"] = agent_dir
+        settings.agent_dirs["test-agent"] = [agent_dir]
 
         try:
             linked = _create_symlinks("SKILL.md", source, ["test-agent"])
@@ -155,6 +155,109 @@ def test_create_symlinks():
             print("  PASS: symlink created and resolves correctly")
         finally:
             settings.agent_dirs = original
+
+
+def test_agent_aliases_and_codex_native_source():
+    """Gemini aliases to agy and Codex consumes the canonical directory."""
+    assert settings.normalize_agents(["claude", "gemini", "codex", "agy"]) == [
+        "claude",
+        "agy",
+        "codex",
+    ]
+    assert settings.skills_dir == Path.home() / ".agents" / "skills"
+    assert settings.targets_for_agent("codex") == []
+
+
+def test_existing_skill_reconciles_all_clients():
+    """A repeated install repairs missing links and reports Codex natively."""
+    from skill_swarm.core.installer import install_skill
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        canonical = tmp_path / ".agents" / "skills"
+        skill_dir = canonical / "reconcile"
+        skill_dir.mkdir(parents=True)
+        skill_file = skill_dir / "SKILL.md"
+        skill_file.write_text("---\nname: reconcile\ndescription: test\n---\n")
+
+        original_skills_dir = settings.skills_dir
+        original_agent_dirs = settings.agent_dirs.copy()
+        settings.skills_dir = canonical
+        settings.agent_dirs = {
+            "claude": [tmp_path / ".claude" / "skills"],
+            "agy": [tmp_path / ".gemini" / "config" / "skills"],
+        }
+        try:
+            result = asyncio.run(
+                install_skill("reconcile", str(skill_file), ["claude", "agy", "codex"])
+            )
+            assert result.success
+            assert result.agents_linked == ["claude", "agy", "codex"]
+            assert (settings.agent_dirs["claude"][0] / "reconcile").is_symlink()
+            assert (settings.agent_dirs["agy"][0] / "reconcile").is_symlink()
+        finally:
+            settings.skills_dir = original_skills_dir
+            settings.agent_dirs = original_agent_dirs
+
+
+def test_uninstall_preserves_unmanaged_client_directory():
+    """Uninstall never removes a real directory owned outside skill-swarm."""
+    from skill_swarm.core.installer import uninstall_skill
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        canonical = tmp_path / ".agents" / "skills"
+        skill_dir = canonical / "safe-remove"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text("# Test\n")
+        unmanaged = tmp_path / ".claude" / "skills" / "safe-remove"
+        unmanaged.mkdir(parents=True)
+        marker = unmanaged / "owned-by-user.txt"
+        marker.write_text("keep")
+
+        original_skills_dir = settings.skills_dir
+        original_agent_dirs = settings.agent_dirs.copy()
+        settings.skills_dir = canonical
+        settings.agent_dirs = {"claude": [unmanaged.parent]}
+        try:
+            result = asyncio.run(uninstall_skill("safe-remove"))
+            assert result.success
+            assert marker.exists()
+            assert any("unmanaged directory" in warning for warning in result.errors)
+        finally:
+            settings.skills_dir = original_skills_dir
+            settings.agent_dirs = original_agent_dirs
+
+
+def test_install_preserves_complete_skill_folder():
+    """Installing a standard skill retains references, scripts, and assets."""
+    from skill_swarm.core.installer import install_skill
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        source_dir = tmp_path / "source-skill"
+        (source_dir / "references").mkdir(parents=True)
+        (source_dir / "scripts").mkdir()
+        (source_dir / "SKILL.md").write_text(
+            "---\nname: complete-skill\ndescription: Exercises folder installation.\n---\n"
+        )
+        (source_dir / "references" / "guide.md").write_text("reference")
+        (source_dir / "scripts" / "run.sh").write_text("#!/bin/sh\n")
+
+        original_skills_dir = settings.skills_dir
+        original_agent_dirs = settings.agent_dirs.copy()
+        settings.skills_dir = tmp_path / ".agents" / "skills"
+        settings.agent_dirs = {}
+        try:
+            result = asyncio.run(install_skill("complete-skill", str(source_dir), ["codex"]))
+            installed = settings.skill_dir("complete-skill")
+            assert result.success
+            assert result.agents_linked == ["codex"]
+            assert (installed / "references" / "guide.md").read_text() == "reference"
+            assert (installed / "scripts" / "run.sh").exists()
+        finally:
+            settings.skills_dir = original_skills_dir
+            settings.agent_dirs = original_agent_dirs
 
 
 def test_normalize_skill_filenames():
@@ -413,5 +516,3 @@ def test_update_skill_not_installed():
     assert result.success is False
     assert any("not installed" in e.lower() for e in result.errors)
     print("  PASS: not installed error")
-
-

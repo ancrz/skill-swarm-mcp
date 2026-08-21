@@ -13,6 +13,7 @@ import zipfile
 from pathlib import Path
 
 import httpx
+import yaml
 
 from skill_swarm.config import settings
 from skill_swarm.core.scanner import scan_skill
@@ -23,6 +24,30 @@ logger = logging.getLogger("skill-swarm.installer")
 # Lock registry to prevent concurrent installs of the same skill
 _install_locks: dict[str, asyncio.Lock] = {}
 _lock_guard = asyncio.Lock()
+
+
+def migrate_legacy_skills_dir() -> int:
+    """Move non-conflicting entries from ~/.agent/skills to ~/.agents/skills.
+
+    The singular directory was used by older skill-swarm releases. The plural
+    directory is the current Agent Skills user scope used directly by Codex.
+    Existing destination entries always win, making this migration idempotent.
+    """
+    legacy = settings.legacy_skills_dir
+    canonical = settings.skills_dir
+    if not legacy.exists() or legacy.resolve() == canonical.resolve():
+        return 0
+
+    canonical.mkdir(parents=True, exist_ok=True)
+    migrated = 0
+    for entry in legacy.iterdir():
+        destination = canonical / entry.name
+        if destination.exists() or destination.is_symlink():
+            logger.warning("Legacy migration skipped existing destination: %s", destination)
+            continue
+        shutil.move(str(entry), str(destination))
+        migrated += 1
+    return migrated
 
 
 async def _get_lock(name: str) -> asyncio.Lock:
@@ -109,8 +134,7 @@ async def install_skill(
     4. Create symlinks to agent directories
     5. Update manifest
     """
-    if agents is None:
-        agents = list(settings.agent_dirs.keys())
+    agents = settings.normalize_agents(agents)
 
     lock = await _get_lock(name)
     async with lock:
@@ -120,12 +144,27 @@ async def install_skill(
 
         # Check if already installed
         if final_path.exists():
+            linked_agents = _create_symlinks(skill_filename, final_path, agents)
+            manifest = load_manifest()
+            existing = manifest.skills.get(name)
+            if existing:
+                existing.agents = linked_agents
+                existing.installed_path = str(final_path)
+            else:
+                manifest.skills[name] = SkillInfo(
+                    name=name,
+                    description=_extract_description(final_path),
+                    source=source,
+                    agents=linked_agents,
+                    installed_path=str(final_path),
+                )
+            save_manifest(manifest)
             return InstallResult(
                 skill_name=name,
                 success=True,
                 install_path=str(final_path),
-                agents_linked=agents,
-                errors=["Already installed (use force to reinstall)"],
+                agents_linked=linked_agents,
+                errors=["Already installed; client links reconciled"],
             )
 
         temp_dir = Path(tempfile.mkdtemp(prefix=f"skill-swarm-{name}-"))
@@ -154,21 +193,23 @@ async def install_skill(
                     errors=[f"Security scan failed: {', '.join(scan_result.findings)}"],
                 )
 
-            # Step 3: Atomic move to global skills dir (subdirectory per skill)
-            skill_dir.mkdir(parents=True, exist_ok=True)
-            if temp_file.exists():
-                shutil.copy2(str(temp_file), str(final_path))
-            else:
-                # If download produced a directory, look for SKILL.md or main .md
-                skill_md = _find_skill_md(temp_dir)
-                if skill_md:
-                    shutil.copy2(str(skill_md), str(final_path))
-                else:
-                    return InstallResult(
-                        skill_name=name,
-                        success=False,
-                        errors=["No skill markdown file found in downloaded content"],
-                    )
+            # Step 3: Validate the Agent Skills entrypoint and atomically install
+            # its complete folder, including scripts/references/assets.
+            skill_md = temp_file if temp_file.exists() else _find_skill_md(temp_dir)
+            if not skill_md:
+                return InstallResult(
+                    skill_name=name,
+                    success=False,
+                    errors=["No SKILL.md found in downloaded content"],
+                )
+            metadata_error = _validate_skill_metadata(skill_md)
+            if metadata_error:
+                return InstallResult(
+                    skill_name=name,
+                    success=False,
+                    errors=[metadata_error],
+                )
+            _install_skill_tree(skill_md.parent, skill_dir)
 
             # Step 4: Create symlinks to agent directories
             linked_agents = _create_symlinks(skill_filename, final_path, agents)
@@ -222,15 +263,25 @@ async def uninstall_skill(name: str) -> InstallResult:
             errors=[f"Skill '{name}' not found at {skill_path}"],
         )
 
-    # Remove symlinks from all agent dirs (directory symlinks)
-    for agent_name, agent_dir in settings.agent_dirs.items():
-        link_path = agent_dir / name
-        if link_path.is_symlink():
-            link_path.unlink(missing_ok=True)
-            logger.info("Removed symlink: %s", link_path)
-        elif link_path.exists():
-            shutil.rmtree(link_path, ignore_errors=True)
-            logger.info("Removed directory: %s", link_path)
+    # Remove only managed symlinks that resolve to this canonical skill. Never
+    # delete a real client directory or a symlink owned by another installer.
+    warnings: list[str] = []
+    canonical_target = skill_dir.resolve()
+    for agent_name, agent_dirs in settings.agent_dirs.items():
+        for agent_dir in agent_dirs:
+            link_path = agent_dir / name
+            if link_path.is_symlink():
+                try:
+                    link_target = link_path.resolve(strict=False)
+                except OSError:
+                    link_target = None
+                if link_target == canonical_target:
+                    link_path.unlink(missing_ok=True)
+                    logger.info("Removed symlink: %s", link_path)
+                else:
+                    warnings.append(f"Skipped unmanaged symlink: {link_path}")
+            elif link_path.exists():
+                warnings.append(f"Skipped unmanaged directory: {link_path}")
 
     # Remove the entire skill directory
     shutil.rmtree(skill_dir, ignore_errors=True)
@@ -241,7 +292,7 @@ async def uninstall_skill(name: str) -> InstallResult:
     save_manifest(manifest)
 
     logger.info("Uninstalled '%s'", name)
-    return InstallResult(skill_name=name, success=True)
+    return InstallResult(skill_name=name, success=True, errors=warnings)
 
 
 async def update_skill(name: str) -> InstallResult:
@@ -310,9 +361,17 @@ async def update_skill(name: str) -> InstallResult:
                 errors=[f"Security scan failed: {', '.join(scan_result.findings)}"],
             )
 
-        # SHA-256 comparison
-        old_hash = hashlib.sha256(installed_path.read_bytes()).hexdigest()
-        new_hash = hashlib.sha256(downloaded.read_bytes()).hexdigest()
+        metadata_error = _validate_skill_metadata(downloaded)
+        if metadata_error:
+            return InstallResult(
+                skill_name=name,
+                success=False,
+                errors=[metadata_error],
+            )
+
+        # Compare complete skill trees so supporting resource changes update too.
+        old_hash = _tree_hash(installed_path.parent)
+        new_hash = _tree_hash(downloaded.parent)
 
         if old_hash == new_hash:
             return InstallResult(
@@ -322,8 +381,8 @@ async def update_skill(name: str) -> InstallResult:
                 errors=["Already up to date (content unchanged)"],
             )
 
-        # Atomic replace
-        os.replace(str(downloaded), str(installed_path))
+        # Atomic directory replacement, including supporting resources.
+        _replace_skill_tree(downloaded.parent, installed_path.parent)
 
         # Update manifest description
         new_desc = _extract_description(installed_path)
@@ -468,21 +527,29 @@ def _create_symlinks(filename: str, source: Path, agents: list[str]) -> list[str
     skill_dir_name = skill_dir.name
 
     linked: list[str] = []
-    for agent_name in agents:
-        agent_dir = settings.agent_dirs.get(agent_name)
-        if agent_dir is None:
+    for agent_name in settings.normalize_agents(agents):
+        if agent_name in settings.native_agents:
+            if source.exists():
+                linked.append(agent_name)
             continue
-        agent_dir.mkdir(parents=True, exist_ok=True)
-        link_path = agent_dir / skill_dir_name
-        # Remove existing symlink/directory
-        if link_path.is_symlink() or link_path.exists():
+
+        targets = settings.targets_for_agent(agent_name)
+        target_success = True
+        for agent_dir in targets:
+            agent_dir.mkdir(parents=True, exist_ok=True)
+            link_path = agent_dir / skill_dir_name
             if link_path.is_symlink():
+                if link_path.resolve(strict=False) == skill_dir.resolve():
+                    continue
                 link_path.unlink()
-            else:
-                shutil.rmtree(link_path, ignore_errors=True)
-        link_path.symlink_to(skill_dir)
-        linked.append(agent_name)
-        logger.info("Symlink: %s → %s", link_path, skill_dir)
+            elif link_path.exists():
+                logger.warning("Refusing to replace unmanaged directory: %s", link_path)
+                target_success = False
+                continue
+            link_path.symlink_to(skill_dir)
+            logger.info("Symlink: %s → %s", link_path, skill_dir)
+        if targets and target_success:
+            linked.append(agent_name)
     return linked
 
 
@@ -536,3 +603,74 @@ def _extract_description(skill_path: Path) -> str:
     except Exception:
         pass
     return ""
+
+
+def _validate_skill_metadata(skill_path: Path) -> str | None:
+    """Validate the required Agent Skills frontmatter fields."""
+    try:
+        content = skill_path.read_text(encoding="utf-8")
+        match = re.match(r"^---\s*\n(.*?)\n---", content, re.DOTALL)
+        if not match:
+            return "SKILL.md must start with YAML frontmatter"
+        metadata = yaml.safe_load(match.group(1)) or {}
+        if not isinstance(metadata, dict):
+            return "SKILL.md frontmatter must be a mapping"
+        for field in ("name", "description"):
+            if not isinstance(metadata.get(field), str) or not metadata[field].strip():
+                return f"SKILL.md frontmatter requires a non-empty '{field}'"
+    except (OSError, UnicodeDecodeError, yaml.YAMLError) as exc:
+        return f"Invalid SKILL.md metadata: {exc}"
+    return None
+
+
+def _tree_hash(directory: Path) -> str:
+    """Return a stable hash of all files in a skill folder."""
+    digest = hashlib.sha256()
+    for path in sorted(p for p in directory.rglob("*") if p.is_file()):
+        if ".git" in path.parts:
+            continue
+        digest.update(path.relative_to(directory).as_posix().encode())
+        digest.update(path.read_bytes())
+    return digest.hexdigest()
+
+
+def _copy_skill_tree(source_dir: Path, destination: Path) -> None:
+    """Copy one skill folder while excluding repository internals."""
+    shutil.copytree(
+        source_dir,
+        destination,
+        dirs_exist_ok=True,
+        ignore=shutil.ignore_patterns(".git", "__pycache__", "*.pyc"),
+    )
+
+
+def _install_skill_tree(source_dir: Path, destination: Path) -> None:
+    """Install a new skill directory atomically on the canonical filesystem."""
+    settings.skills_dir.mkdir(parents=True, exist_ok=True)
+    stage = Path(tempfile.mkdtemp(prefix=f".install-{destination.name}-", dir=settings.skills_dir))
+    try:
+        _copy_skill_tree(source_dir, stage)
+        os.replace(stage, destination)
+    finally:
+        if stage.exists():
+            shutil.rmtree(stage, ignore_errors=True)
+
+
+def _replace_skill_tree(source_dir: Path, destination: Path) -> None:
+    """Replace an installed skill atomically with rollback on failure."""
+    stage = Path(tempfile.mkdtemp(prefix=f".update-{destination.name}-", dir=settings.skills_dir))
+    backup = settings.skills_dir / f".backup-{destination.name}"
+    try:
+        _copy_skill_tree(source_dir, stage)
+        if backup.exists():
+            shutil.rmtree(backup, ignore_errors=True)
+        os.replace(destination, backup)
+        try:
+            os.replace(stage, destination)
+        except Exception:
+            os.replace(backup, destination)
+            raise
+        shutil.rmtree(backup, ignore_errors=True)
+    finally:
+        if stage.exists():
+            shutil.rmtree(stage, ignore_errors=True)

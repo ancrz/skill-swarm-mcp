@@ -178,8 +178,12 @@ pip install -e .
 
 # Configure environment
 cp .env.example .env
-# Edit .env and add your GitHub token
+
+# Edit .env and add your GitHub token (Prevents API Rate Limits)
+# E.g., SKILL_SWARM_GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxx
 ```
+
+> **Note on GitHub Token:** Skill Swarm uses the GitHub API to calculate Trust Scores (stars, recent activity, issues) for skills hosted on GitHub. If the token is missing or expired, the search will still work by using a safe "fallback" registry score, but adding a token is highly recommended to avoid rate-limiting.
 
 ### Configure Your AI Agent Globally
 

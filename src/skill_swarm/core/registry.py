@@ -499,6 +499,9 @@ async def _merge_and_score(
         for r in unique:
             if r.url and "github.com" in r.url:
                 trust = await evaluate_github_repo(r.url)
+                if trust.verdict == "UNKNOWN":
+                    # Fallback to registry baseline if token is missing/expired
+                    trust = quick_trust_from_registry(r.source)
                 r.trust = trust
                 if r.source == "skillssh":
                     r.relevance = round(r.relevance * 0.7 + trust.score * 0.3, 3)

@@ -499,9 +499,6 @@ async def _merge_and_score(
         for r in unique:
             if r.url and "github.com" in r.url:
                 trust = await evaluate_github_repo(r.url)
-                if trust.verdict == "UNKNOWN":
-                    # Fallback to registry baseline if token is missing/expired
-                    trust = quick_trust_from_registry(r.source)
                 r.trust = trust
                 if r.source == "skillssh":
                     r.relevance = round(r.relevance * 0.7 + trust.score * 0.3, 3)
@@ -523,14 +520,15 @@ async def search_remote(
 
     Order: Skills.sh → MCP Registry → Smithery → Glama → GitHub (by trust level).
     """
-    # Query all registries in parallel
     tasks = [
         search_skillssh(query, limit),
         search_mcp_registry(query, limit),
         search_smithery(query, limit),
         search_glama(query, limit),
-        search_github(query, limit),
     ]
+    if settings.github_token:
+        tasks.append(search_github(query, limit))
+        
     all_results_lists = await asyncio.gather(*tasks, return_exceptions=True)
 
     # Flatten results (skip exceptions)
@@ -555,7 +553,9 @@ async def search_remote_phased(
     Returns (results, metadata). Never raises.
     """
     phase1_source_names = ["skillssh", "mcp_registry"]
-    phase2_source_names = ["smithery", "glama", "github"]
+    phase2_source_names = ["smithery", "glama"]
+    if settings.github_token:
+        phase2_source_names.append("github")
 
     # ── Phase 1: High-trust registries ──
     t0 = time.monotonic()
@@ -581,8 +581,9 @@ async def search_remote_phased(
         phase2_tasks = [
             search_smithery(query, limit),
             search_glama(query, limit),
-            search_github(query, limit),
         ]
+        if settings.github_token:
+            phase2_tasks.append(search_github(query, limit))
         phase2_gather = await asyncio.gather(*phase2_tasks, return_exceptions=True)
         phase2_ms = (time.monotonic() - t1) * 1000
 

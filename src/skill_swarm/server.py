@@ -15,14 +15,14 @@ Provides 9 tools for AI agent skill management:
 import json
 import logging
 
-from mcp.server import MCPServer
+from mcp.server.fastmcp import FastMCP
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 
-mcp = MCPServer(
+mcp = FastMCP(
     "skill-swarm",
     instructions=(
         "Skill Swarm manages AI agent skills globally. "

@@ -62,7 +62,7 @@ Remote search uses a two-phase strategy — high-trust registries first, fallbac
 flowchart LR
     Q["Query"] --> P1["Phase 1<br/>Skills.sh + MCP Registry"]
     P1 -->|">= 3 results"| D["Deduplicate<br/>+ Trust Score"]
-    P1 -->|"< 3 results"| P2["Phase 2<br/>Smithery + Glama + GitHub"]
+    P1 -->|"< 3 results"| P2["Phase 2<br/>Smithery + Glama<br/>+ GitHub (if token)"]
     P2 --> D
     D --> R["Sorted Results"]
 
@@ -134,22 +134,18 @@ sequenceDiagram
     participant A as AI Agent
     participant S as skill-swarm
     participant R as Registries
-    participant G as GitHub API
     participant FS as Filesystem
 
     A->>S: install_skill("pdf-parser", url)
+    S->>R: Fetch source (GitHub, npx, etc.)
     S->>S: Download complete skill folder
     S->>S: Security scan (pattern matching)
     alt scan fails
         S-->>A: ❌ Blocked (security_score < 0.5)
     end
-    S->>G: GET /repos/{owner}/{repo}
-    G-->>S: stars, license, pushed_at, archived
-    S->>S: Compute trust score (5 dimensions)
     S->>S: Validate SKILL.md frontmatter
     S->>FS: Stage and atomically install complete folder
-    S->>FS: Reconcile Claude and agy managed symlinks
-    S->>FS: Confirm Codex native canonical discovery
+    S->>FS: Manage symlinks (~/.claude, ~/.gemini, ~/.agents)
     S->>S: Update manifest.json + usage tracker
     S->>S: Purge search cache
     S-->>A: ✅ InstallResult (path, agents, scores)

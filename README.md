@@ -202,7 +202,7 @@ Register it in the user scope:
 ```bash
 claude mcp add --scope user skill-swarm \
   -e SKILL_SWARM_ENV_FILE="$HOME/.env" \
-  -- /absolute/path/to/.venv/bin/python -m skill_swarm.server
+  -- "$PWD/.venv/bin/python" -m skill_swarm.server
 ```
 
 ---
@@ -215,7 +215,7 @@ Register it with the CLI:
 
 ```bash
 agy mcp add --env SKILL_SWARM_ENV_FILE="$HOME/.env" \
-  skill-swarm /absolute/path/to/.venv/bin/python -m skill_swarm.server
+  skill-swarm "$PWD/.venv/bin/python" -m skill_swarm.server
 ```
 
 ---
@@ -225,9 +225,15 @@ agy mcp add --env SKILL_SWARM_ENV_FILE="$HOME/.env" \
 Codex stores global MCP configuration in `~/.codex/config.toml`:
 
 ```bash
-codex mcp add --env SKILL_SWARM_ENV_FILE="$HOME/.env" \
-  skill-swarm -- /absolute/path/to/.venv/bin/python -m skill_swarm.server
+cat << 'EOF' >> ~/.codex/config.toml
+
+[mcpServers.skill-swarm]
+command = "python"
+args = ["-m", "skill_swarm.server"]
+env = { SKILL_SWARM_ENV_FILE = "~/.env" }
+EOF
 ```
+*Note: Run Codex from inside the virtual environment (`uv run codex`) so `python` resolves correctly.*
 
 ---
 

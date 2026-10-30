@@ -164,7 +164,8 @@ def test_agent_aliases_and_codex_native_source():
         "agy",
         "codex",
     ]
-    assert settings.skills_dir == Path.home() / ".agents" / "skills"
+    from skill_swarm.config import Settings
+    assert Settings.model_fields["skills_dir"].default == Path.home() / ".agents" / "skills"
     assert settings.targets_for_agent("codex") == []
 
 

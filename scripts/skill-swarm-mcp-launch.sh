@@ -10,7 +10,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-# 1. Resolve Python Interpreter (Project venv > Python 3.14 > Python 3.13 > Python 3.12 > System)
+# 1. Resolve Python Interpreter (Project venv > Python 3.14 > Python 3.13 > Python 3.12 > System > Auto-Bootstrap)
 if [[ -x "$PROJECT_ROOT/.venv/bin/python" ]]; then
     PYTHON_BIN="$PROJECT_ROOT/.venv/bin/python"
 elif command -v python3.14 >/dev/null 2>&1; then
@@ -19,8 +19,13 @@ elif command -v python3.13 >/dev/null 2>&1; then
     PYTHON_BIN="$(command -v python3.13)"
 elif command -v python3.12 >/dev/null 2>&1; then
     PYTHON_BIN="$(command -v python3.12)"
-else
+elif command -v python3 >/dev/null 2>&1; then
     PYTHON_BIN="$(command -v python3)"
+else
+    # Host lacks Python entirely: invoke autonomous user-space setup
+    echo "[skill-swarm-launch] Host lacks Python. Autonomous user-space provisioning via setup.sh..." >&2
+    "$SCRIPT_DIR/setup.sh" >&2
+    PYTHON_BIN="$PROJECT_ROOT/.venv/bin/python"
 fi
 
 export PYTHONPATH="$PROJECT_ROOT/src${PYTHONPATH:+:$PYTHONPATH}"

@@ -179,7 +179,19 @@ sequenceDiagram
 - **Git** (for cloning skill sources)
 - **GitHub token** (optional, for 5000 req/hr vs 60)
 
-### Installation
+### Autonomous Clean-Slate Provisioning (AEP Pattern)
+
+If the host **lacks Python or package managers entirely**, or for a 1-command zero-root setup:
+
+```bash
+# Autonomous user-space provisioning (installs Astral uv + standalone hermetic Python 3.12+ + venv + registers clients)
+./scripts/setup.sh
+
+# Or verify toolchain health (100% read-only audit)
+./scripts/setup.sh --check
+```
+
+### Manual Installation (Standard)
 
 ```bash
 git clone https://github.com/ancrz/skill-swarm-mcp.git

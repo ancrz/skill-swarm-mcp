@@ -26,6 +26,24 @@ AI agents (Claude, agy, Codex) need skills to be effective. Today, finding and i
 
 ---
 
+## Active Pipeline Intent & Reinforcement Graph
+
+### Intent: `feat:re_as_sdd_skill_swarm_aep_resilience` (Task ID 117)
+Reverse Engineering as Software Design Document (RE-as-SDD) integration of Agent Execution Plane (AEP) resilience primitives into Skill Swarm MCP.
+
+```mermaid
+flowchart LR
+    I["Intent: feat:re_as_sdd_skill_swarm_aep_resilience"] --> M1["M1: planned (Archon) ✅"]
+    M1 --> M2["M2: documented (Graphos G1) ✅"]
+    M2 --> M3["M3: audited (Ontos) ⏳"]
+    M3 --> M4["M4: implemented (Pragma) ⏳"]
+    M4 --> M5["M5: verified (Dokimos) ⏳"]
+    M5 --> M6["M6: documented (Graphos G2) ⏳"]
+    M6 --> M7["M7: committed (Hermon) ⏳"]
+```
+
+---
+
 ## How It Works
 
 ```mermaid

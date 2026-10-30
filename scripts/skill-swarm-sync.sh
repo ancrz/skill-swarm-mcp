@@ -86,5 +86,26 @@ print('✓ Registered in Claude Code:', p)
 " || true
 fi
 
+# 4. Codex CLI / ChatGPT (~/.codex/config.toml)
+CODEX_CONFIG="$HOME/.codex/config.toml"
+if [[ -d "$HOME/.codex" ]]; then
+    if command -v codex >/dev/null 2>&1; then
+        codex mcp add skill-swarm -- "$LAUNCHER" >/dev/null 2>&1 || true
+        echo "✓ Registered in Codex CLI via CLI ($CODEX_CONFIG)"
+    else
+        "$PYTHON_BIN" -c "
+from pathlib import Path
+p = Path('$CODEX_CONFIG')
+content = p.read_text() if p.exists() else ''
+if '[mcp_servers.skill-swarm]' not in content:
+    with p.open('a') as f:
+        f.write('\n[mcp_servers.skill-swarm]\ncommand = \"$LAUNCHER\"\n')
+    print('✓ Registered in Codex CLI:', p)
+else:
+    print('✓ Already registered in Codex CLI:', p)
+" || true
+    fi
+fi
+
 echo "=== [3/3] Auto-Plug Complete ==="
 echo "skill-swarm is verified, compiled, and registered across all active AI harnesses."

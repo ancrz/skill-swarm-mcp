@@ -118,7 +118,7 @@ run_check() {
 
     # 3. Client Auto-Plug Registration
     local PLUG_OK=0
-    for cfg in "$HOME/.gemini/config/mcp_config.json" "$HOME/.gemini/settings.json" "$HOME/.claude/settings.json"; do
+    for cfg in "$HOME/.gemini/config/mcp_config.json" "$HOME/.gemini/settings.json" "$HOME/.claude/settings.json" "$HOME/.codex/config.toml"; do
         if [[ -f "$cfg" ]] && grep -q "skill-swarm" "$cfg" 2>/dev/null; then
             PLUG_OK=$((PLUG_OK + 1))
         fi

@@ -1,804 +1,397 @@
-# Tools Reference
+<a id="top"></a>
 
-Complete reference for all 9 tools exposed by the skill-swarm MCP server.
+# Skill Swarm MCP — Complete Toolchain Reference & Gap Analysis
 
----
+Comprehensive technical reference for the **Skill Swarm MCP Server** (v1.2.0).
 
-## Overview
-
-| Tool                                        | Purpose                                            | Scope          |
-| ------------------------------------------- | -------------------------------------------------- | -------------- |
-| [search_skills](#search_skills)             | Find skills across 5 registries with trust scoring | Remote + Local |
-| [match_skills](#match_skills)               | BM25F + 7-signal matching of installed skills      | Local          |
-| [install_skill](#install_skill)             | Download, scan, trust-check, and install globally  | Remote → Local |
-| [uninstall_skill](#uninstall_skill)         | Remove skill, symlinks, and tracking data          | Local          |
-| [update_skill](#update_skill)               | Check and apply updates from original source       | Remote → Local |
-| [list_skills](#list_skills)                 | Inventory with health, symlinks, and usage stats   | Local          |
-| [get_skill_info](#get_skill_info)           | Full metadata, content, and usage of a skill       | Local          |
-| [cherry_pick_context](#cherry_pick_context) | Extract specific markdown sections from a skill    | Local          |
-| [skill_health](#skill_health)               | Usage analytics and dead skill detection           | Local          |
+This document serves as the canonical specification for all exposed tools, operational parameters, security invariants, error handling, backward-compatibility forwarders, and identified architectural gaps for future evolution.
 
 ---
 
-## Recommended Workflow
+## Table of Contents
 
+- [Architectural Topology](#architectural-topology)
+- [Consolidated 3-Tool Surface (AEP Pattern)](#consolidated-3-tool-surface-aep-pattern)
+  - [`skill_discover`](#1-skill_discover)
+  - [`skill_manage`](#2-skill_manage)
+  - [`cherry_pick_context`](#3-cherry_pick_context)
+- [Backward Compatibility Forwarders](#backward-compatibility-forwarders)
+- [Resilience Primitives & Security Invariants (SPECs 1–5)](#resilience-primitives--security-invariants-specs-15)
+- [Data Models & Schema Specifications](#data-models--schema-specifications)
+- [Configuration & Environment Variables](#configuration--environment-variables)
+- [Gap Analysis & Future Improvements](#gap-analysis--future-improvements)
+
+[↑ Back to top](#top)
+
+---
+
+## Architectural Topology
+
+Skill Swarm groups tools into a unified 3-tier plane inspired by the **Agent Execution Plane (AEP)**:
+1. **Discovery & Orientation Plane** (`skill_discover`): Capabilities manifest, BM25F local matching, and 5-registry federated search.
+2. **Lifecycle Control Plane** (`skill_manage`): Inventory, inspection, atomic installation with Landlock LSM and Topos DAG validation, health scoring, and SHA-256 audit verification.
+3. **Context Optimization Plane** (`cherry_pick_context`): High-precision AST markdown section extraction to minimize token usage.
+
+```mermaid
+flowchart TD
+    Client["AI Agent: Claude, agy, Codex, Gemini"] -->|"MCP JSON-RPC Protocol (stdio)"| Dispatcher{"Tool Dispatcher"}
+
+    subgraph CoreSurface["Consolidated 3-Tool Core Surface"]
+        T1["skill_discover: capabilities, match, search, discover"]
+        T2["skill_manage: list, info, install, uninstall, update, health, audit"]
+        T3["cherry_pick_context: targeted markdown section extraction"]
+    end
+
+    subgraph CompatForwarders["Backward Compatibility Forwarders"]
+        F1["search_skills"] -.-> T1
+        F2["match_skills"] -.-> T1
+        F3["install_skill"] -.-> T2
+        F4["uninstall_skill"] -.-> T2
+        F5["update_skill"] -.-> T2
+        F6["list_skills"] -.-> T2
+        F7["get_skill_info"] -.-> T2
+        F8["skill_health"] -.-> T2
+        F9["verify_audit"] -.-> T2
+    end
+
+    Dispatcher --> T1
+    Dispatcher --> T2
+    Dispatcher --> T3
+
+    T1 --> EngineMatch["Matcher V2: BM25F + C++ RapidFuzz"]
+    T1 --> EngineSearch["Registry Client: 5 Registries"]
+
+    T2 --> GuardTopos["ToposGuard: Anti-Co-Dependency DAG"]
+    T2 --> SandboxLandlock["Landlock LSM: Kernel In-Process Sandbox"]
+    T2 --> LedgerAudit["AuditLedger: SHA-256 Tamper-Evident DB"]
+    T2 --> EngineHealth["HealthScorer: Q, R, E, T, Security Veto"]
+
+    T3 --> ExtractorMD["Markdown AST Section Parser"]
+
+    style Client fill:#8B5CF6,stroke:#6D28D9,color:#fff
+    style CoreSurface fill:#1E293B,stroke:#334155,color:#fff
+    style CompatForwarders fill:#334155,stroke:#475569,color:#fff
+    style GuardTopos fill:#3B82F6,stroke:#2563EB,color:#fff
+    style SandboxLandlock fill:#3B82F6,stroke:#2563EB,color:#fff
+    style LedgerAudit fill:#3B82F6,stroke:#2563EB,color:#fff
+    style EngineHealth fill:#3B82F6,stroke:#2563EB,color:#fff
 ```
-1. match_skills("pdf parsing")          → Check local skills first
-2. search_skills("parse PDF", "remote") → No local match? Search registries
-3. install_skill("pdf-parser", url)     → Install the best result
-4. cherry_pick_context("pdf-parser",    → Use only what you need
-     "Quick Start,API Reference")
-5. update_skill("pdf-parser")           → Refresh from source when needed
-```
+
+[↑ Back to top](#top)
 
 ---
 
-## search_skills
+## Consolidated 3-Tool Surface (AEP Pattern)
 
-Search for skills across 5 remote registries with trust scoring, plus local installed skills.
+### 1. `skill_discover`
 
-**Registries searched** (in parallel):
+Unified orientation, local skill matching, and remote multi-registry search tool.
 
-- Skills.sh (`skills.sh`) — primary registry, actual agent skills
-- Official MCP Registry (`registry.modelcontextprotocol.io`)
-- Smithery (`registry.smithery.ai`)
-- Glama.ai (`glama.ai`)
-- GitHub (`api.github.com`) — with optional token for 5000 req/hr
+#### Signature
+```python
+async def skill_discover(
+    action: str = "discover",
+    query: str | None = None,
+    scope: str = "all",
+    limit: int = 5,
+) -> str
+```
 
-### Parameters
+#### Parameters
 
-| Parameter | Type      | Default      | Description                                             |
-| --------- | --------- | ------------ | ------------------------------------------------------- |
-| `query`   | `string`  | _(required)_ | Search keywords — NOT a full sentence (e.g. `"docker"`, `"pdf parsing"`). Separate terms with spaces or commas. |
-| `scope`   | `string`  | `"all"`      | Where to search: `"local"`, `"remote"`, or `"all"`      |
-| `limit`   | `integer` | `5`          | Maximum number of results to return                     |
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `action` | `string` | `"discover"` | Action mode: `"capabilities"`, `"discover"`, `"match"`, `"search"`. |
+| `query` | `string \| null` | `null` | Query terms, task description, or capability keyword. |
+| `scope` | `string` | `"all"` | Scope for `"search"` action: `"all"`, `"local"`, `"remote"`. |
+| `limit` | `integer` | `5` | Maximum number of results to return (capped at 20). |
 
-### Returns
+#### Action Modes
 
-JSON array of `SearchResult` objects:
+1. **`action="capabilities"`**:
+   Returns the autonomous server manifest, active version (`1.2.0`), implemented resilience SPECs (1–5), supported registries, and tool mapping. Does not require `query`.
+2. **`action="discover"`**:
+   Two-tier cascading discovery. First queries local skills using BM25F (`threshold=0.05`). If matching local skills are found, returns them with `source: "local"`. If no local match exists, falls back to querying remote registries with `source: "remote"`.
+3. **`action="match"`**:
+   Explicit local matching against installed skills in `~/.agents/skills/`. Computes BM25F keyword and RapidFuzz fuzzy similarity scores.
+4. **`action="search"`**:
+   Explicit multi-registry search across 5 registries (Skills.sh, MCP Registry, Smithery, Glama.ai, GitHub) with trust scoring and deduplication.
 
+#### Example: Querying Capabilities Manifest
 ```json
-[
-  {
-    "name": "pdf-tools-mcp",
-    "description": "MCP server for PDF manipulation and text extraction",
-    "source": "mcp_registry",
-    "url": "https://github.com/example/pdf-tools-mcp",
-    "relevance": 0.85,
-    "tags": ["pdf", "text-extraction"],
-    "trust": {
-      "score": 0.78,
-      "confidence": 0.9,
-      "verdict": "TRUST",
-      "dimensions": {
-        "recency": 0.92,
-        "popularity": 0.65,
-        "maintenance": 0.8,
-        "security": 0.85,
-        "completeness": 0.7
-      }
-    }
-  }
-]
-```
-
-### Fields
-
-| Field         | Type               | Description                                                              |
-| ------------- | ------------------ | ------------------------------------------------------------------------ |
-| `name`        | `string`           | Skill/server name                                                        |
-| `description` | `string`           | What the skill does                                                      |
-| `source`      | `string`           | Origin: `"local"`, `"skillssh"`, `"smithery"`, `"github"`, `"mcp_registry"`, `"glama"` |
-| `url`         | `string`           | Download URL or repository link                                          |
-| `relevance`   | `float`            | Match quality 0.0-1.0                                                    |
-| `tags`        | `string[]`         | Categorization tags                                                      |
-| `trust`       | `TrustScore\|null` | Git-quality trust score (null for local results)                         |
-
-### Trust Score Dimensions
-
-| Dimension      | Weight | Signals                                                            |
-| -------------- | ------ | ------------------------------------------------------------------ |
-| `recency`      | 0.20   | Exponential decay since last push (half-life: 180 days)            |
-| `popularity`   | 0.20   | Log-normalized stars, forks, watchers                              |
-| `maintenance`  | 0.25   | Push frequency, open issues ratio                                  |
-| `security`     | 0.25   | License trust level (MIT=1.0, GPL=0.5, none=0.1), archived penalty |
-| `completeness` | 0.10   | Description, homepage, topics, README presence                     |
-
-### Trust Verdicts
-
-| Score     | Verdict   | Recommended Action        |
-| --------- | --------- | ------------------------- |
-| >= 0.75   | `TRUST`   | Safe to auto-install      |
-| 0.50-0.74 | `CAUTION` | Show to agent for review  |
-| 0.25-0.49 | `WARNING` | Manual review recommended |
-| < 0.25    | `REJECT`  | Block installation        |
-
-### Examples
-
-```
-# Search everything
-search_skills("database")
-
-# Only search remote registries
-search_skills("web scraping", scope="remote", limit=10)
-
-# Only search installed skills
-search_skills("docker deploy", scope="local")
-```
-
-### Caching
-
-- Search results are cached for **1 hour** (configurable via `SKILL_SWARM_CACHE_SEARCH_TTL`)
-- Trust scores are cached for **24 hours** (configurable via `SKILL_SWARM_CACHE_TRUST_TTL`)
-- Cache is automatically purged when skills are installed or uninstalled
-
-### Search Phases (Internal)
-
-Internally, remote search uses a two-phase strategy for latency optimization:
-
-- **Phase 1:** Skills.sh + Official MCP Registry (high-trust, parallel)
-- **Phase 2:** Smithery + Glama + GitHub (triggered only when Phase 1 returns fewer than `search_phase1_min_results` results, default: 3)
-
-This is transparent to MCP consumers — the response format is unchanged. Phase metadata is logged at INFO level for observability.
-
-Configure the threshold:
-| Variable | Default | Description |
-|---|---|---|
-| `SKILL_SWARM_SEARCH_PHASE1_MIN_RESULTS` | `3` | Phase 2 triggers below this count |
-
----
-
-## match_skills
-
-Find installed skills matching a task description using BM25F + multi-signal scoring.
-
-This is the **first tool to call** when you need a skill — check what's already installed before searching remotely.
-
-### Parameters
-
-| Parameter          | Type     | Default      | Description                                          |
-| ------------------ | -------- | ------------ | ---------------------------------------------------- |
-| `task_description` | `string` | _(required)_ | Search keywords — NOT a full sentence (e.g. `"docker deploy"`, `"pdf extract"`). Separate terms with spaces or commas. |
-| `threshold`        | `float`  | `0.05`       | Minimum relevance score (0.0-1.0). Default 0.05 = 5% |
-
-### Returns
-
-JSON array of matched skills:
-
-```json
-[
-  {
-    "name": "docker-ops",
-    "description": "Docker container management and deployment operations",
-    "relevance_pct": 45.2,
-    "source": "https://github.com/example/docker-ops",
-    "tags": ["docker", "devops", "deployment"]
-  }
-]
-```
-
-### 7 Scoring Signals
-
-| Signal            | Weight | Description                                          |
-| ----------------- | ------ | ---------------------------------------------------- |
-| Exact match       | 30     | Query equals skill name                              |
-| Prefix match      | 20     | Skill name starts with query                         |
-| Phrase match      | 15     | Query found as substring in any field                |
-| BM25F             | 15     | Field-weighted relevance (name=3x, tags=2x, desc=1x) |
-| Jaccard tags      | 10     | Set similarity on tag sets                           |
-| Fuzzy name        | 7      | Typo-tolerant name matching (rapidfuzz)              |
-| Fuzzy description | 3      | Partial match on description                         |
-
-### BM25F Parameters
-
-Optimized for small corpus (10-100 skills):
-
-- `k1 = 1.2` — term frequency saturation
-- `b = 0.3` — low length normalization (skills are short documents)
-- IDF: `log(1 + (N - df + 0.5) / (df + 0.5))`
-
-### Usage Tracking
-
-Each skill returned in match results is tracked as a `match` event in usage analytics.
-
-### Examples
-
-```
-# Basic task matching
-match_skills("pdf parsing text extraction")
-
-# Broad query with lower threshold
-match_skills("deploy", threshold=0.01)
-
-# Strict matching for exact needs
-match_skills("kubernetes helm", threshold=0.15)
-```
-
----
-
-## install_skill
-
-Download, security-scan, trust-check, and install a skill globally with agent symlinks.
-
-### Pipeline
-
-```
-download source → security scan → trust check → install to ~/.agents/skills/{name}/SKILL.md → reconcile client discovery → update manifest
-```
-
-### Parameters
-
-| Parameter | Type     | Default           | Description                                        |
-| --------- | -------- | ----------------- | -------------------------------------------------- |
-| `name`    | `string` | _(required)_      | Skill identifier (e.g. `"pdf-parser"`)             |
-| `source`  | `string` | _(required)_      | URL (markdown, GitHub repo) or local path          |
-| `agents`  | `string` | `"claude,agy,codex"` | Comma-separated global clients; `gemini` aliases to `agy` |
-
-### Accepted Source Formats
-
-| Format              | Example                                                      |
-| ------------------- | ------------------------------------------------------------ |
-| GitHub repo URL     | `https://github.com/owner/repo`                              |
-| Raw file URL        | `https://raw.githubusercontent.com/owner/repo/main/skill.md` |
-| Direct markdown URL | `https://example.com/my-skill.md`                            |
-| Local file path     | `/home/user/skills/my-skill.md`                              |
-
-### Returns
-
-JSON `InstallResult` object:
-
-```json
+// Request
 {
-  "skill_name": "pdf-parser",
-  "success": true,
-  "install_path": "/home/user/.agents/skills/pdf-parser/SKILL.md",
-  "agents_linked": ["claude", "agy", "codex"],
-  "security_score": 0.95,
-  "trust_score": 0.78,
-  "errors": []
+  "action": "capabilities"
 }
-```
 
-### Fields
-
-| Field            | Type          | Description                            |
-| ---------------- | ------------- | -------------------------------------- |
-| `skill_name`     | `string`      | Name used for installation             |
-| `success`        | `boolean`     | Whether installation succeeded         |
-| `install_path`   | `string`      | Final path of the installed skill file |
-| `agents_linked`  | `string[]`    | Agents that received symlinks          |
-| `security_score` | `float`       | Security scan result (0.0-1.0)         |
-| `trust_score`    | `float\|null` | Trust score if remote source           |
-| `errors`         | `string[]`    | Any errors encountered                 |
-
-### Security Scan
-
-The scanner checks for dangerous patterns before installation:
-
-- `eval()`, `exec()`, `os.system()` calls
-- Shell injection patterns
-- Filesystem destruction (`shutil.rmtree("/")`)
-- Network exfiltration patterns
-- Obfuscated code
-
-Minimum security score to allow installation: **0.5** (configurable via `SKILL_SWARM_SECURITY_THRESHOLD`)
-
-### Directory Structure After Install
-
-```
-~/.agents/skills/
-└── pdf-parser/
-    └── SKILL.md              ← Installed file
-
-~/.claude/skills/
-└── pdf-parser -> ~/.agents/skills/pdf-parser  ← Directory symlink
-
-~/.gemini/config/skills/
-└── pdf-parser -> ~/.agents/skills/pdf-parser  ← agy directory symlink
-
-~/.gemini/antigravity-cli/skills/
-└── pdf-parser -> ~/.agents/skills/pdf-parser  ← agy compatibility symlink
-```
-
-### Side Effects
-
-- Purges search cache (inventory changed)
-- Records `installed_at` timestamp in usage tracker
-- Updates global manifest at `~/.agents/skills/manifest.json`
-
-### Examples
-
-```
-# Install from GitHub
-install_skill("dbhub", "https://github.com/bytebase/dbhub")
-
-# Install for specific agents only
-install_skill("my-tool", "https://example.com/tool.md", agents="claude")
-
-# Install from local file
-install_skill("custom-skill", "/home/user/my-skill.md", agents="claude,agy,codex")
-```
-
----
-
-## uninstall_skill
-
-Remove a skill, all agent symlinks, and usage tracking data.
-
-### Parameters
-
-| Parameter | Type     | Default      | Description          |
-| --------- | -------- | ------------ | -------------------- |
-| `name`    | `string` | _(required)_ | Skill name to remove |
-
-### Returns
-
-JSON `InstallResult` object:
-
-```json
+// Response (truncated)
 {
-  "skill_name": "pdf-parser",
-  "success": true,
-  "install_path": "",
-  "agents_linked": [],
-  "security_score": 1.0,
-  "trust_score": null,
-  "errors": []
-}
-```
-
-### What Gets Removed
-
-1. Skill directory: `~/.agents/skills/{name}/` (entire directory tree)
-2. Managed Claude and agy symlinks that point to the canonical directory
-3. Manifest entry in `~/.agents/skills/manifest.json`
-4. Usage tracking data for the skill
-
-### Side Effects
-
-- Purges search cache (inventory changed)
-- Removes usage stats from `~/.agents/skills/.usage.json`
-
-### Examples
-
-```
-# Remove a skill completely
-uninstall_skill("pdf-parser")
-```
-
----
-
-## update_skill
-
-Check for updates to an installed skill from its original source and apply atomically if content changed.
-
-### Pipeline
-
-```
-load manifest → validate source → download to temp (in skills_dir) → security scan → SHA-256 compare → atomic replace (if changed)
-```
-
-### Parameters
-
-| Parameter | Type     | Default      | Description                  |
-| --------- | -------- | ------------ | ---------------------------- |
-| `name`    | `string` | _(required)_ | Skill name to update         |
-
-### Returns
-
-JSON `InstallResult` object:
-
-```json
-{
-  "skill_name": "pdf-parser",
-  "success": true,
-  "install_path": "/home/user/.agents/skills/pdf-parser/SKILL.md",
-  "agents_linked": ["claude", "agy", "codex"],
-  "security_score": 0.95,
-  "trust_score": null,
-  "errors": []
-}
-```
-
-If content is already up to date:
-
-```json
-{
-  "skill_name": "pdf-parser",
-  "success": true,
-  "install_path": "/home/user/.agents/skills/pdf-parser/SKILL.md",
-  "agents_linked": [],
-  "security_score": 0.95,
-  "trust_score": null,
-  "errors": ["Already up to date (content unchanged)"]
-}
-```
-
-### How It Works
-
-1. Reads the `source` URL recorded in the manifest at install time
-2. Downloads the latest version to a temp directory inside `skills_dir` (ensuring `os.replace()` atomicity across the same filesystem)
-3. Runs the same security scanner as `install_skill`
-4. Computes SHA-256 of old and new content
-5. If hashes differ: atomically replaces the installed file and updates manifest description
-6. If hashes match: returns success with "Already up to date" in `errors`
-7. Symlinks are preserved — they point to the skill directory, not the file
-
-### Side Effects (when content changed)
-
-- Records a `full_read` event in usage tracking
-- Purges search cache (content changed)
-- Updates `description` in `manifest.json` if frontmatter changed
-
-### Error Cases
-
-| Error                                   | Cause                                     |
-| --------------------------------------- | ----------------------------------------- |
-| `"Skill 'X' is not installed"`          | Skill not in manifest                     |
-| `"Skill 'X' has no source URL"`         | Manifest entry missing `source` field     |
-| `"Source path no longer exists"`        | Local file source was deleted or moved    |
-| `"No SKILL.md found in downloaded..."`  | Source no longer contains a valid skill   |
-| `"Security scan failed"`                | Downloaded content failed security check  |
-| `"Update failed: ..."`                  | Unexpected I/O or network error           |
-
-### Examples
-
-```
-# Update a skill from its original source
-update_skill("pdf-parser")
-
-# Update skill-swarm itself
-update_skill("skill-swarm")
-```
-
----
-
-## list_skills
-
-List all installed skills with metadata, symlink health status, usage stats, and dead skill detection.
-
-### Parameters
-
-| Parameter | Type     | Default | Description                                              |
-| --------- | -------- | ------- | -------------------------------------------------------- |
-| `agent`   | `string` | `"all"` | Filter by client name (`"claude"`, `"agy"`, `"codex"`) or `"all"`; legacy `"gemini"` aliases to `"agy"` |
-
-### Returns
-
-```json
-{
-  "total": 3,
-  "skills_dir": "/home/user/.agents/skills",
-  "dead_skills": ["unused-tool"],
-  "skills": [
-    {
-      "name": "docker-ops",
-      "description": "Docker container management",
-      "version": "1.0.0",
-      "source": "https://github.com/example/docker-ops",
-      "agents": ["claude", "agy", "codex"],
-      "symlinks": {
-        "claude": "ok",
-        "agy": "ok",
-        "codex": "native"
-      },
-      "usage": {
-        "primary_usage": "full",
-        "match_hits": 12,
-        "cherry_pick_count": 5,
-        "full_read_count": 3,
-        "last_used": "2025-06-15T14:30:00"
-      }
-    }
-  ]
-}
-```
-
-### Symlink Health Status
-
-| Status                      | Meaning                                           |
-| --------------------------- | ------------------------------------------------- |
-| `"ok"`                      | Symlink exists and resolves to a valid `SKILL.md` |
-| `"broken"`                  | Symlink exists but `SKILL.md` is missing inside   |
-| `"directory (not symlink)"` | Path exists as a real directory, not a symlink    |
-| `"missing"`                 | No symlink or directory found for this agent      |
-
-### Dead Skills
-
-The `dead_skills` array lists skills that are installed but have never been matched, read, or cherry-picked. Consider removing these to keep your skill inventory clean.
-
-### Examples
-
-```
-# List all skills
-list_skills()
-
-# List only Claude-linked skills
-list_skills(agent="claude")
-```
-
----
-
-## get_skill_info
-
-Get full metadata, content, symlink status, and usage stats of an installed skill.
-
-Calling this tool counts as a **full_read** in usage tracking.
-
-### Parameters
-
-| Parameter | Type     | Default      | Description           |
-| --------- | -------- | ------------ | --------------------- |
-| `name`    | `string` | _(required)_ | Skill name to inspect |
-
-### Returns
-
-```json
-{
-  "name": "docker-ops",
-  "path": "/home/user/.agents/skills/docker-ops/SKILL.md",
-  "size_bytes": 4523,
-  "content": "---\nname: docker-ops\n...\n# Docker Operations\n...",
-  "description": "Docker container management and deployment",
-  "version": "1.0.0",
-  "tags": ["docker", "devops"],
-  "source": "https://github.com/example/docker-ops",
-  "symlinks": {
-    "claude": "linked",
-    "agy": "linked",
-    "codex": "native"
+  "status": "OK",
+  "server": "skill-swarm",
+  "version": "1.2.0",
+  "resilience_specs": {
+    "SPEC-1": "Resilient storage with pre-flight writability and volatile RAM fallback",
+    "SPEC-2": "Tamper-evident SHA-256 chained audit ledger and credential masking",
+    "SPEC-3": "Topos Integrity Circuit Breaker (Anti-co-dependency DAG)",
+    "SPEC-4": "User-space Landlock LSM sandboxing probe (pure ctypes libc.so.6)",
+    "SPEC-5": "Multidimensional skill health and trust scoring (Q, R, E, T, Security Veto)"
   },
-  "usage": {
-    "primary_usage": "full",
-    "match_hits": 12,
-    "cherry_pick_count": 5,
-    "full_read_count": 4,
-    "last_used": "2025-06-15T14:30:00"
-  }
+  "registries": ["Skills.sh", "MCP Registry", "Smithery", "Glama.ai", "GitHub"]
 }
 ```
 
-### Symlink Status Values
-
-| Status                      | Meaning                               |
-| --------------------------- | ------------------------------------- |
-| `"linked"`                  | Symlink exists and resolves correctly |
-| `"directory (not symlink)"` | Real directory, not a symlink         |
-| `"not linked"`              | No symlink exists for this agent      |
-
-### Error Response
-
-If the skill is not found:
-
-```json
-{
-  "error": "Skill 'unknown-skill' not found at /home/user/.agents/skills/unknown-skill/SKILL.md"
-}
-```
-
-### Examples
-
-```
-# Get full info about a skill
-get_skill_info("docker-ops")
-```
+[↑ Back to top](#top)
 
 ---
 
-## cherry_pick_context
+### 2. `skill_manage`
 
-Extract specific sections from a skill's markdown content — like `git cherry-pick` for context.
+Unified lifecycle control plane managing inventory, inspection, installation, removal, health diagnostics, and audit ledger integrity.
 
-Instead of loading an entire skill into the agent's context window, extract only the sections relevant to the current task. Sections are matched against H2 (`##`) and H3 (`###`) markdown headers.
+#### Signature
+```python
+async def skill_manage(
+    action: str,
+    name: str | None = None,
+    source: str | None = None,
+    agents: str = "claude,agy,codex",
+    agent_filter: str = "all",
+) -> str
+```
 
-Calling this tool counts as a **cherry_pick** event in usage tracking.
+#### Parameters
 
-### Parameters
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `action` | `string` | _(required)_ | Action mode: `"list"`, `"info"`, `"install"`, `"uninstall"`, `"update"`, `"health"`, `"audit"`. |
+| `name` | `string \| null` | `null` | Name of the skill. Required for `"info"`, `"install"`, `"uninstall"`, `"update"`, and optional for `"health"`. |
+| `source` | `string \| null` | `null` | Source URL, git clone URL, or local path. Required for `"install"`. |
+| `agents` | `string` | `"claude,agy,codex"` | Comma-separated list of agent clients to link upon installation. |
+| `agent_filter` | `string` | `"all"` | Filter installed skills by target agent in `"list"` (`"all"`, `"claude"`, `"agy"`, `"codex"`). |
 
-| Parameter    | Type     | Default      | Description                                                    |
-| ------------ | -------- | ------------ | -------------------------------------------------------------- |
-| `skill_name` | `string` | _(required)_ | Name of the installed skill                                    |
-| `sections`   | `string` | _(required)_ | Comma-separated section names (e.g. `"Rollback,Health Check"`) |
+#### Action Modes & Security Protocols
 
-### Section Matching
+1. **`action="list"`**:
+   Lists all installed skills in `~/.agents/skills/` along with directory symlink status (`linked`, `native`, `unmanaged directory`, `missing`), usage counts, and multidimensional health scores.
+2. **`action="info"`**:
+   Inspects complete metadata, `manifest.json` fields, `SKILL.md` content, and detailed usage statistics.
+3. **`action="install"`**:
+   Executes safe atomic installation under the **Topos Integrity Protocol**:
+   - **Step 1: Topos Dependency Audit**: Verifies declared skill dependencies. Blocks installation if cycles or co-dependencies are detected (`SkillToposGuard`).
+   - **Step 2: Landlock LSM Sandbox Probe**: Pure `ctypes` Linux Landlock LSM probe (`libc.so.6`) isolates download operations with fail-soft fallback.
+   - **Step 3: Pattern & Regex Scan**: Scans contents for prompt injections, credential exfiltration, and dangerous subprocess patterns.
+   - **Step 4: Atomic Deployment**: Clones/downloads to temporary directory, verifies `SKILL.md`, and atomically renames to `~/.agents/skills/{name}/`.
+   - **Step 5: Symlink Reconciliation**: Reconciles client directories (`~/.claude/skills/`, `~/.gemini/config/skills/`).
+   - **Step 6: Cryptographic Audit**: Records tamper-evident event in `audit.db` with SHA-256 hash chaining and secret masking.
+4. **`action="uninstall"`**:
+   Safely removes the skill directory, purges agent symlinks, removes entries from `manifest.json`, and records an `UNINSTALL` event in the audit ledger.
+5. **`action="update"`**:
+   Checks origin repository, re-verifies trust, stages update atomically, and preserves local tracking.
+6. **`action="health"`**:
+   Evaluates multidimensional health score ($H = 0.35Q + 0.30R + 0.15E + 0.20T$). If `name` is omitted, returns fleet-wide health and dead skill detection. If `name` is specified, returns deep diagnostics with dimension breakdown and security veto status.
+7. **`action="audit"`**:
+   Verifies cryptographic integrity of the SHA-256 chained audit ledger (`audit.db`). Re-calculates every block hash from genesis, verifying zero tamper, deletion, or backdating.
 
-Sections are matched in order of specificity:
-
-1. **Exact match** (case-insensitive): `"Overview"` matches `## Overview`
-2. **Substring match**: `"Rollback"` matches `## Rollback Procedure`
-3. **Word overlap** (50%+ words): `"Health Check"` matches `## Container Health Checks`
-
-### Returns
-
-````json
-{
-  "skill_name": "docker-ops",
-  "sections_requested": ["Rollback", "Health Check"],
-  "sections_extracted": 2,
-  "content": {
-    "Rollback Procedure": "Steps to rollback a deployment:\n1. ...\n2. ...",
-    "Container Health Checks": "Configure health checks:\n```yaml\nhealthcheck:\n  test: curl -f http://localhost/\n```"
-  },
-  "available_sections": [
-    "Overview",
-    "Installation",
-    "Rollback Procedure",
-    "Container Health Checks",
-    "Troubleshooting"
-  ],
-  "not_found": []
-}
-````
-
-### Fields
-
-| Field                | Type       | Description                             |
-| -------------------- | ---------- | --------------------------------------- |
-| `skill_name`         | `string`   | The skill inspected                     |
-| `sections_requested` | `string[]` | What was requested                      |
-| `sections_extracted` | `integer`  | How many sections were found            |
-| `content`            | `object`   | Map of section header → section content |
-| `available_sections` | `string[]` | All sections available in the skill     |
-| `not_found`          | `string[]` | Requested sections that had no match    |
-
-### Error Response
-
-If the skill is not found:
-
+#### Example: Verifying the Audit Chain
 ```json
+// Request
 {
-  "error": "Skill 'unknown-skill' not found at /home/user/.agents/skills/unknown-skill/SKILL.md"
+  "action": "audit"
+}
+
+// Response
+{
+  "valid": true,
+  "verified": true,
+  "events_verified": 42,
+  "head_hash": "a4f5b892c90321f87e35b71289cf004925890fa18712a48bcde6912304918231",
+  "genesis_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+  "tamper_detected": false
 }
 ```
 
-### Examples
-
-```
-# Extract two sections
-cherry_pick_context("docker-ops", "Rollback,Health Check")
-
-# Get the quick start from a skill
-cherry_pick_context("pdf-parser", "Quick Start")
-
-# Multiple specific sections
-cherry_pick_context("kubernetes-ops", "Helm Charts,Secrets Management,Scaling")
-```
+[↑ Back to top](#top)
 
 ---
 
-## skill_health
+### 3. `cherry_pick_context`
 
-Usage analytics dashboard: which skills are active, cherry-pick-only, or dead.
+High-precision token-saving extractor that returns only requested markdown sections from an installed skill's `SKILL.md`.
 
-### Parameters
+#### Signature
+```python
+async def cherry_pick_context(
+    skill_name: str,
+    sections: list[str],
+) -> str
+```
 
-None.
+#### Parameters
 
-### Returns
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `skill_name` | `string` | _(required)_ | Target installed skill name. |
+| `sections` | `list[string]` | _(required)_ | Header titles to extract (e.g., `["Quick Start", "API Reference"]`). |
 
+#### Return Structure
 ```json
 {
-  "total_tracked": 5,
-  "dead_skills": ["unused-tool"],
-  "cache": {
-    "cache_dir": "/home/user/.agents/skills/.cache",
-    "total_entries": 12,
-    "expired_entries": 3,
-    "active_entries": 9,
-    "size_bytes": 24576
-  },
-  "skills": {
-    "docker-ops": {
-      "primary_usage": "full",
-      "match_hits": 12,
-      "cherry_pick_count": 5,
-      "full_read_count": 3,
-      "last_used": "2025-06-15T14:30:00",
-      "installed_at": "2025-06-01T10:00:00"
-    },
-    "pdf-parser": {
-      "primary_usage": "cherry_pick_only",
-      "match_hits": 8,
-      "cherry_pick_count": 4,
-      "full_read_count": 0,
-      "last_used": "2025-06-14T09:15:00",
-      "installed_at": "2025-06-02T12:00:00"
-    },
-    "unused-tool": {
-      "primary_usage": "dead",
-      "match_hits": 0,
-      "cherry_pick_count": 0,
-      "full_read_count": 0,
-      "last_used": "",
-      "installed_at": "2025-06-03T08:00:00"
+  "skill_name": "docker-tools",
+  "requested_sections": ["Quick Start", "API Reference"],
+  "found_sections": ["Quick Start"],
+  "missing_sections": ["API Reference"],
+  "content": "## Quick Start\n\nRun `docker ps` to verify active containers...",
+  "tokens_saved_estimate": 4500,
+  "original_bytes": 18450,
+  "extracted_bytes": 1240
+}
+```
+
+[↑ Back to top](#top)
+
+---
+
+## Backward Compatibility Forwarders
+
+For legacy agent workflows and external integrations, all 9 historic tools are preserved as zero-overhead forwarders:
+
+| Legacy Tool | Parameters | Forwarding Route | Purpose |
+|---|---|---|---|
+| `search_skills` | `query`, `scope="all"`, `limit=5` | `skill_discover(action="search", ...)` | Multi-registry remote search |
+| `match_skills` | `task_description`, `threshold=0.05` | `skill_discover(action="match", ...)` | Local BM25F skill matcher |
+| `install_skill` | `name`, `source`, `agents="claude,agy,codex"` | `skill_manage(action="install", ...)` | Atomic skill installer |
+| `uninstall_skill` | `name` | `skill_manage(action="uninstall", ...)` | Skill removal & symlink cleanup |
+| `update_skill` | `name` | `skill_manage(action="update", ...)` | Origin source update |
+| `list_skills` | `agent="all"` | `skill_manage(action="list", ...)` | Inventory & symlink health |
+| `get_skill_info` | `name` | `skill_manage(action="info", ...)` | Deep metadata & content read |
+| `skill_health` | `name=None` | `skill_manage(action="health", ...)` | Usage & dead skill detection |
+| `verify_audit` | _(none)_ | `skill_manage(action="audit")` | SHA-256 ledger verification |
+
+[↑ Back to top](#top)
+
+---
+
+## Resilience Primitives & Security Invariants (SPECs 1–5)
+
+Ported from **Agent Execution Plane (AEP)** via Reverse Engineering as Software Design Document (RE-as-SDD):
+
+### SPEC-1: Storage Fail-Soft & RAM Volatile Fallback
+- **Pre-flight writability check** (`check_storage_writability`): Tests directory writability by creating, writing, and unlinking a transient `.test_write` marker.
+- **Fail-soft RAM fallback**: If the primary storage path (`~/.agents/skills`) is located on a read-only filesystem (e.g. strict container or CI sandbox), Skill Swarm falls back to `/tmp/skill_swarm_ram_{uid}` or an in-memory mock store, logging a warning rather than crashing.
+
+### SPEC-2: Tamper-Evident SHA-256 Chained Audit Ledger
+- **Cryptographic Chaining**: Every lifecycle event (INSTALL, UNINSTALL, UPDATE, AUDIT) writes a block to SQLite `audit.db`:
+  $$\text{Hash}_n = \text{SHA-256}(\text{Index}_n \parallel \text{Timestamp}_n \parallel \text{Event}_n \parallel \text{Payload}_n \parallel \text{Hash}_{n-1})$$
+- **Secret Redaction**: Any API keys, bearer tokens, or sensitive credentials matching pattern `(token|key|secret|password)=...` are replaced with `[REDACTED_SECRET]` before hashing to prevent credential leaks in immutable logs.
+
+### SPEC-3: Topos DAG Circuit Breaker (Anti-Co-Dependency)
+- **Mathematical Invariant**: Validates dependency graphs using Kahn's algorithm and Depth-First Search cycle detection.
+- **Strict Prohibition**: Co-dependent relationships ($A \leftrightarrow B$ circular coupling) are strictly rejected with error `CO_DEPENDENCY_CYCLE_DETECTED`, preserving system stability.
+
+### SPEC-4: User-Space Landlock LSM Sandbox Probe
+- **Kernel-level Sandboxing**: Direct system call binding via `ctypes.CDLL("libc.so.6")` invoking syscalls `444` (`landlock_create_ruleset`), `445` (`landlock_add_rule`), and `446` (`landlock_restrict_self`).
+- **Graceful Degradation**: On non-Linux kernels (macOS, Windows) or unprivileged environments where Landlock is absent or disabled, the sandbox probe returns `landlock_supported=False` with status `FAIL_SOFT_ACTIVE`, falling back to AST pattern scanning.
+
+### SPEC-5: Multidimensional Health & Security Veto
+- **Mathematical Model**:
+  $$\text{Score} = 0.35 \times Q + 0.30 \times R + 0.15 \times E + 0.20 \times T$$
+  Where $Q$ = Quality/Success rate, $R$ = Recency exponential decay ($T_{1/2} = 180\text{d}$), $E$ = Execution frequency, and $T$ = Test/Symlink validation.
+- **Security Veto**: If any security scanner detect dangerous payloads (prompt injection, unauthorized socket creation, arbitrary code execution), $\text{Score}$ is instantly forced to $0.0$, verdict set to `REJECT`, and installation is aborted.
+
+[↑ Back to top](#top)
+
+---
+
+## Data Models & Schema Specifications
+
+### `SearchResult`
+```json
+{
+  "name": "docker-manager",
+  "description": "Comprehensive container management and docker-compose orchestration",
+  "source": "Skills.sh",
+  "url": "https://skills.sh/docker-manager",
+  "tags": ["docker", "containers", "devops"],
+  "trust": {
+    "score": 0.89,
+    "confidence": 0.95,
+    "verdict": "TRUST",
+    "dimensions": {
+      "recency": 0.92,
+      "popularity": 0.85,
+      "maintenance": 0.90,
+      "security": 1.00,
+      "completeness": 0.80
     }
   }
 }
 ```
 
-### Usage Classifications
-
-| Classification       | Criteria                                             | Recommendation                    |
-| -------------------- | ---------------------------------------------------- | --------------------------------- |
-| `"full"`             | Read complete at least once (`full_read_count > 0`)  | Active — keep installed           |
-| `"cherry_pick_only"` | Only partial extractions (`cherry_pick_count > 0`)   | Active — likely a reference skill |
-| `"match_only"`       | Appears in matches but never read (`match_hits > 0`) | Review — may not be needed        |
-| `"dead"`             | Never matched, read, or cherry-picked                | Remove — wasting space            |
-
-### Cache Stats
-
-| Field             | Description                                        |
-| ----------------- | -------------------------------------------------- |
-| `cache_dir`       | Location of the cache directory                    |
-| `total_entries`   | Total cached items (search results + trust scores) |
-| `expired_entries` | Items past their TTL                               |
-| `active_entries`  | Items still within TTL                             |
-| `size_bytes`      | Total cache size on disk                           |
-
-### Examples
-
+### `SkillInfo`
+```json
+{
+  "name": "docker-manager",
+  "description": "Container management tools",
+  "version": "1.2.0",
+  "tags": ["docker", "containers"],
+  "source": "https://skills.sh/docker-manager",
+  "agents": ["claude", "agy", "codex"],
+  "installed_path": "/home/user/.agents/skills/docker-manager",
+  "installed_at": "2026-10-29T23:45:00Z"
+}
 ```
-# Check overall skill health
-skill_health()
+
+### `AuditVerificationResult`
+```json
+{
+  "valid": true,
+  "verified": true,
+  "events_verified": 14,
+  "head_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "genesis_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+  "tamper_detected": false,
+  "discrepancies": []
+}
 ```
+
+[↑ Back to top](#top)
 
 ---
 
-## Data Models
+## Configuration & Environment Variables
 
-### SkillInfo
+All settings are configured via environment variables prefixed with `SKILL_SWARM_` or in a local `.env` file:
 
-Metadata stored in the global manifest for each installed skill.
+| Variable | Type | Default | Description |
+|---|---|---|---|
+| `SKILL_SWARM_SKILLS_DIR` | `Path` | `~/.agents/skills` | Global skill repository root. |
+| `SKILL_SWARM_GITHUB_TOKEN` | `string` | _(empty)_ | GitHub Personal Access Token (boosts rate limit from 60 to 5000 req/hr). |
+| `SKILL_SWARM_CACHE_SEARCH_TTL` | `integer` | `3600` | Search result cache TTL in seconds. |
+| `SKILL_SWARM_CACHE_TRUST_TTL` | `integer` | `86400` | Trust score cache TTL in seconds (24h). |
+| `SKILL_SWARM_SEARCH_TIMEOUT` | `float` | `15.0` | Maximum timeout for remote HTTP registry requests. |
+| `SKILL_SWARM_SEARCH_MAX_RESULTS` | `integer` | `10` | Default result cap for search queries. |
+| `SKILL_SWARM_SECURITY_THRESHOLD` | `float` | `0.5` | Minimum security score required to permit installation. |
+| `SKILL_SWARM_SKILLSSH_ENABLED` | `boolean` | `true` | Enable Skills.sh primary registry query engine. |
+| `SKILL_SWARM_SKILLSSH_NPX_PATH` | `string` | `"npx"` | Path to the `npx` executable for `skills find`. |
+| `SKILL_SWARM_SKILLSSH_GITHUB_FALLBACK` | `boolean` | `true` | Fallback to GitHub topic search when npx is unavailable. |
+| `SKILL_SWARM_ENABLE_LANDLOCK` | `boolean` | `true` | Enable Linux Landlock LSM in-process sandbox probe. |
+| `SKILL_SWARM_AUDIT_LOG_ENABLED` | `boolean` | `true` | Enable SHA-256 chained audit ledger logging. |
 
-| Field            | Type       | Default                | Description                        |
-| ---------------- | ---------- | ---------------------- | ---------------------------------- |
-| `name`           | `string`   | _(required)_           | Skill identifier                   |
-| `description`    | `string`   | `""`                   | What the skill does                |
-| `version`        | `string`   | `"0.1.0"`              | Semantic version                   |
-| `tags`           | `string[]` | `[]`                   | Categorization tags                |
-| `source`         | `string`   | `""`                   | URL or registry where it was found |
-| `agents`         | `string[]` | `["claude", "agy", "codex"]` | Global clients receiving the skill |
-| `installed_path` | `string`   | `""`                   | Filesystem path of installation    |
-
-### TrustScore
-
-Git-quality trust assessment for remote skills.
-
-| Field        | Type     | Description                                                                            |
-| ------------ | -------- | -------------------------------------------------------------------------------------- |
-| `score`      | `float`  | Composite trust score 0.0-1.0                                                          |
-| `confidence` | `float`  | Data completeness factor 0.0-1.0                                                       |
-| `verdict`    | `string` | `TRUST`, `CAUTION`, `WARNING`, or `REJECT`                                             |
-| `dimensions` | `object` | Individual dimension scores (recency, popularity, maintenance, security, completeness) |
-
-### SkillUsageStats
-
-Per-skill usage tracking data.
-
-| Field               | Type      | Description                                                       |
-| ------------------- | --------- | ----------------------------------------------------------------- |
-| `match_hits`        | `integer` | Times appeared in match/search results                            |
-| `cherry_pick_count` | `integer` | Times sections were extracted                                     |
-| `full_read_count`   | `integer` | Times read completely                                             |
-| `last_used`         | `string`  | ISO timestamp of last interaction                                 |
-| `last_usage_type`   | `string`  | Type of last event: `match`, `cherry_pick`, `full_read`, `search` |
-| `installed_at`      | `string`  | ISO timestamp of installation                                     |
+[↑ Back to top](#top)
 
 ---
 
-## Configuration
+## Gap Analysis & Future Improvements
 
-All settings use the `SKILL_SWARM_` prefix and can be set via environment variables or `.env` file.
+To maintain architectural transparency and guide continuous evolution, the following gaps and enhancement opportunities are identified:
 
-| Variable                               | Default   | Description                                   |
-| -------------------------------------- | --------- | --------------------------------------------- |
-| `SKILL_SWARM_GITHUB_TOKEN`             | _(empty)_ | GitHub PAT for API access (5000 req/hr vs 60) |
-| `SKILL_SWARM_CACHE_SEARCH_TTL`         | `3600`    | Search cache TTL in seconds                   |
-| `SKILL_SWARM_CACHE_TRUST_TTL`          | `86400`   | Trust score cache TTL in seconds              |
-| `SKILL_SWARM_SEARCH_TIMEOUT`           | `15.0`    | HTTP timeout for registry queries             |
-| `SKILL_SWARM_SEARCH_MAX_RESULTS`       | `10`      | Max results per search query                  |
-| `SKILL_SWARM_SECURITY_THRESHOLD`       | `0.5`     | Min security scan score to allow installation |
-| `SKILL_SWARM_SKILLSSH_ENABLED`         | `true`    | Enable Skills.sh as primary registry          |
-| `SKILL_SWARM_SKILLSSH_NPX_PATH`        | `npx`     | Path to npx binary for `skills find`          |
-| `SKILL_SWARM_SKILLSSH_GITHUB_FALLBACK` | `true`    | Use GitHub topic search when npx unavailable  |
-| `SKILL_SWARM_SKILLSSH_SEARCH_TIMEOUT`  | `30.0`    | Timeout for npx subprocess calls              |
+| Gap ID | Domain | Current State (v1.2.0) | Target State & Future Improvement | Impact / Priority |
+|---|---|---|---|---|
+| **GAP-1** | **Registry Synchronization** | Periodic TTL caching (1h search, 24h trust). Remote registries are polled on demand. | Implement HTTP `ETag` / `If-None-Match` conditional polling and Webhook/SSE subscriptions for instant registry invalidation. | Medium — Reduces redundant HTTP traffic. |
+| **GAP-2** | **Distributed Multi-Node Storage** | Local filesystem (`~/.agents/skills`) with in-memory RAM fallback. | Add remote storage adapters (S3, GCS, Cloudflare R2, SQLite VFS) to support multi-agent distributed clusters sharing a skill fleet. | High — Enables enterprise multi-agent swarms. |
+| **GAP-3** | **Standalone Go Micro-Binary Extraction** | Python-based FastMCP server with RapidFuzz C++ extension for BM25F ranking. | Compile an optional Go / Rust standalone micro-binary for execution in RAM (`memfd_create` pattern from AEP) on low-resource headless embedded nodes lacking Python entirely. | Medium — Zero-dependency standalone execution. |
+| **GAP-4** | **Cross-Platform OS Sandboxing** | Linux-native Landlock LSM via `ctypes` (`libc.so.6`). Fails soft on macOS / Windows. | Integrate macOS Seatbelt (`sandbox_init`) and Windows AppContainer / Job Object sandboxing bindings for universal OS kernel isolation. | High — Defense-in-depth across macOS/Windows developers. |
+| **GAP-5** | **Event-Driven Hot Reloading** | Agents poll or invoke `skill_manage(action='list')` to detect filesystem changes. | Add in-process `inotify` / `ReadDirectoryChangesW` file watcher to emit MCP Resource Notifications (`notifications/resources/updated`) when skills are modified out-of-band. | Medium — Zero-latency agent context updates. |
+| **GAP-6** | **Skill Semantic Embeddings Cache** | Hybrid lexical BM25F + 7-signal RapidFuzz scoring. | Integrate optional local ONNX / GGUF small embedding model (e.g. `all-MiniLM-L6-v2`) for hybrid vector-lexical semantic skill retrieval without network latency. | Low — Improves semantic recall on ambiguous task descriptions. |
+
+[↑ Back to top](#top)

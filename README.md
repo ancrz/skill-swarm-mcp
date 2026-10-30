@@ -293,6 +293,9 @@ For seamless compatibility with existing agent prompts, all legacy tools are pre
 | `skill_health(name)` | `skill_manage(action="health", name=...)` |
 | `verify_audit()` | `skill_manage(action="audit")` |
 
+> [!NOTE]
+> For the complete specification of all parameter schemas, return payloads, execution invariants, and the architectural gap analysis matrix, see the comprehensive [Tools Reference & Gap Analysis](TOOLS.md).
+
 [↑ Back to top](#top)
 
 ---
@@ -457,6 +460,7 @@ skill-swarm-mcp/
 │   └── test_e2e_v2.py         # E2E V2 — trust, cache, BM25F (19 tests)
 ├── LICENSE                    # Apache 2.0
 ├── README.md                  # Single source of truth documentation
+├── TOOLS.md                   # Complete toolchain reference & gap analysis
 └── pyproject.toml             # Python package config (v1.2.0)
 ```
 

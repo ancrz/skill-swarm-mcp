@@ -1,3 +1,5 @@
+<a id="top"></a>
+
 <div align="center">
 
 # Skill Swarm
@@ -7,7 +9,8 @@
 [![Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue?style=flat-square)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.12+-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
 [![MCP](https://img.shields.io/badge/MCP-Protocol-black?style=flat-square)](https://modelcontextprotocol.io)
-[![9 Tools](https://img.shields.io/badge/Tools-9-green?style=flat-square)]()
+[![Tools](https://img.shields.io/badge/Tools-3_Core_%2B_Compat-green?style=flat-square)]()
+[![Tests Passing](https://img.shields.io/badge/Tests-68%2F68_Passed-success?style=flat-square&logo=pytest&logoColor=white)](tests/)
 
 </div>
 
@@ -24,6 +27,8 @@ AI agents (Claude, agy, Codex) need skills to be effective. Today, finding and i
 
 **Skill Swarm automates the entire pipeline.** The agent queries "pdf parsing" and Skill Swarm searches 5 registries (Skills.sh, MCP Registry, Smithery, Glama, GitHub), evaluates trust, installs the best match, and makes it available instantly.
 
+[↑ Back to top](#top)
+
 ---
 
 ## Active Pipeline Intent & Reinforcement Graph
@@ -35,12 +40,14 @@ Reverse Engineering as Software Design Document (RE-as-SDD) integration of Agent
 flowchart LR
     I["Intent: feat:re_as_sdd_skill_swarm_aep_resilience"] --> M1["M1: planned (Archon) ✅"]
     M1 --> M2["M2: documented (Graphos G1) ✅"]
-    M2 --> M3["M3: audited (Ontos) ⏳"]
-    M3 --> M4["M4: implemented (Pragma) ⏳"]
-    M4 --> M5["M5: verified (Dokimos) ⏳"]
-    M5 --> M6["M6: documented (Graphos G2) ⏳"]
-    M6 --> M7["M7: committed (Hermon) ⏳"]
+    M2 --> M3["M3: audited (Ontos) ✅"]
+    M3 --> M4["M4: implemented (Pragma) ✅"]
+    M4 --> M5["M5: verified (Dokimos) ✅"]
+    M5 --> M6["M6: documented (Graphos G2) ✅"]
+    M6 --> M7["M7: committed (Hermon) ✅"]
 ```
+
+[↑ Back to top](#top)
 
 ---
 
@@ -48,21 +55,21 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    A["🤖 Agent queries:<br/>'database access'"] --> B{match_skills}
-    B -->|Local skill found| C["✅ Use it"]
-    B -->|No match| D[search_skills]
-    D --> E["5 registries<br/>in parallel"]
-    E --> F[install_skill]
-    F --> G["download"]
-    G --> H["security scan"]
-    H --> I["trust check"]
-    I --> J["validate Agent Skills format"]
-    J --> L["atomic folder install<br/>~/.agents/skills/{name}/"]
-    L --> K["reconcile client discovery<br/>Claude · agy · Codex"]
-    C --> M{Need partial context?}
-    M -->|Yes| N[cherry_pick_context]
-    M -->|No| O["📄 Full skill loaded"]
-    N --> P["Extract only<br/>sections you need"]
+    A["Agent queries: database access"] --> B{"skill_discover"}
+    B -->|"Local skill found"| C["Use it"]
+    B -->|"No match"| D["Search 5 registries"]
+    D --> E["Registries in parallel"]
+    E --> F["skill_manage: install"]
+    F --> G["Download"]
+    G --> H["Landlock probe + Regex security scan"]
+    H --> I["Trust evaluation"]
+    I --> J["Topos DAG anti-co-dependency audit"]
+    J --> L["Atomic folder install: ~/.agents/skills/{name}/"]
+    L --> K["Reconcile client discovery: Claude, agy, Codex"]
+    C --> M{"Need partial context?"}
+    M -->|"Yes"| N["cherry_pick_context"]
+    M -->|"No"| O["Full skill loaded"]
+    N --> P["Extract only sections needed"]
 
     style A fill:#8B5CF6,stroke:#6D28D9,color:#fff
     style C fill:#10B981,stroke:#059669,color:#fff
@@ -78,9 +85,9 @@ Remote search uses a two-phase strategy — high-trust registries first, fallbac
 
 ```mermaid
 flowchart LR
-    Q["Query"] --> P1["Phase 1<br/>Skills.sh + MCP Registry"]
-    P1 -->|">= 3 results"| D["Deduplicate<br/>+ Trust Score"]
-    P1 -->|"< 3 results"| P2["Phase 2<br/>Smithery + Glama<br/>+ GitHub (if token)"]
+    Q["Query"] --> P1["Phase 1: Skills.sh + MCP Registry"]
+    P1 -->|">= 3 results"| D["Deduplicate + Trust Score"]
+    P1 -->|"< 3 results"| P2["Phase 2: Smithery + Glama + GitHub"]
     P2 --> D
     D --> R["Sorted Results"]
 
@@ -94,80 +101,78 @@ flowchart LR
 ### Architecture
 
 ```mermaid
-graph TB
-    Agent["🤖 AI Agent (Claude, agy, Codex)"]
-    Agent -->|MCP Protocol stdio| Server
+flowchart TB
+    Agent["AI Agent: Claude, agy, Codex"]
+    Agent -->|"MCP Protocol stdio"| Server
 
-    subgraph Server["skill-swarm MCP Server"]
+    subgraph Server["skill-swarm MCP Server (v1.2.0)"]
         direction TB
-        Tools["9 Tools · Python 3.12+"]
-        subgraph Core["Core Engines"]
-            Matcher["Matcher V2<br/>BM25F + 7 signals"]
-            Trust["Trust Engine<br/>5 dimensions · git-quality"]
+        subgraph Tools["Consolidated 3-Tool Surface (AEP Pattern)"]
+            T1["skill_discover: capabilities, match, search"]
+            T2["skill_manage: list, info, install, uninstall, update, health, audit"]
+            T3["cherry_pick_context: targeted section extraction"]
         end
-        subgraph Infra["Infrastructure"]
-            Cache["Cache Layer<br/>TTL file · 1h/24h"]
-            Usage["Usage Tracker<br/>dead skill detection"]
+        subgraph Core["Resilient Core Engines (RE-as-SDD)"]
+            Topos["Topos DAG Circuit Breaker: anti-co-dependency"]
+            Sandbox["Landlock LSM Sandbox: kernel-level probe"]
+            Audit["SHA-256 Chained Audit Ledger: tamper-evident"]
+            Health["Multidimensional Health & Security Veto"]
+            Matcher["Matcher V2: BM25F + SIMD C++ RapidFuzz"]
+            Trust["Trust Engine: 5 dimensions · git-quality"]
+        end
+        subgraph Infra["Infrastructure & Resilience"]
+            Storage["Storage Fail-Soft: Volatile RAM Fallback"]
+            AutoPlug["Auto-Plug Sync: Claude, agy, Codex, Gemini"]
         end
     end
 
-    Server --> Registries
-    Server --> Skills
-
-    subgraph Registries["5 Registries"]
-        SkillsSH["Skills.sh"]
-        MCP["MCP Registry"]
-        Smithery["Smithery"]
-        Glama["Glama.ai"]
-        GitHub["GitHub (+token)"]
-    end
-
-    subgraph Skills["Global Skill Discovery"]
-        Canonical["~/.agents/skills/{name}/<br/>SKILL.md · scripts · references · assets"]
-        ClaudeLinks["~/.claude/skills/{name}<br/>managed symlink"]
-        AgyLinks["agy global skill paths<br/>managed symlinks"]
-        CodexNative["Codex<br/>reads canonical source"]
-        Canonical --> ClaudeLinks
-        Canonical --> AgyLinks
-        Canonical --> CodexNative
-    end
+    Server --> Registries["5 Registries: Skills.sh, MCP, Smithery, Glama, GitHub"]
+    Server --> Skills["Global Skill Discovery: ~/.agents/skills/"]
 
     style Agent fill:#8B5CF6,stroke:#6D28D9,color:#fff
     style Server fill:#1E293B,stroke:#334155,color:#fff
     style Tools fill:#334155,stroke:#475569,color:#fff
     style Matcher fill:#3B82F6,stroke:#2563EB,color:#fff
     style Trust fill:#3B82F6,stroke:#2563EB,color:#fff
-    style Cache fill:#475569,stroke:#64748B,color:#fff
-    style Usage fill:#475569,stroke:#64748B,color:#fff
-    style Canonical fill:#10B981,stroke:#059669,color:#fff
-    style ClaudeLinks fill:#E1F5EE,stroke:#0F6E56,color:#04342C
-    style AgyLinks fill:#E1F5EE,stroke:#0F6E56,color:#04342C
-    style CodexNative fill:#E1F5EE,stroke:#0F6E56,color:#04342C
+    style Topos fill:#3B82F6,stroke:#2563EB,color:#fff
+    style Sandbox fill:#3B82F6,stroke:#2563EB,color:#fff
+    style Audit fill:#3B82F6,stroke:#2563EB,color:#fff
+    style Health fill:#3B82F6,stroke:#2563EB,color:#fff
+    style Storage fill:#475569,stroke:#64748B,color:#fff
+    style AutoPlug fill:#475569,stroke:#64748B,color:#fff
 ```
 
 ### Install Pipeline
 
 ```mermaid
 sequenceDiagram
-    participant A as AI Agent
-    participant S as skill-swarm
+    autonumber
+    actor A as AI Agent
+    participant S as skill_swarm (skill_manage)
+    participant T as ToposGuard
+    participant L as LandlockSandbox
     participant R as Registries
+    participant Aud as SHA-256 Ledger
     participant FS as Filesystem
 
-    A->>S: install_skill("pdf-parser", url)
-    S->>R: Fetch source (GitHub, npx, etc.)
-    S->>S: Download complete skill folder
-    S->>S: Security scan (pattern matching)
-    alt scan fails
-        S-->>A: ❌ Blocked (security_score < 0.5)
+    A->>S: install(name, source)
+    S->>T: audit_skill_dependencies()
+    alt Cycle / Co-dependency detected
+        T-->>S: BLOCKED (cycle error)
+        S-->>A: Blocked by Topos Integrity Protocol
+    else Coherent DAG
+        T-->>S: APPROVED
+        S->>L: run_isolated_probe()
+        S->>R: Download skill package
+        S->>S: Pattern scan + frontmatter validation
+        S->>FS: Atomic move to ~/.agents/skills/{name}/
+        S->>FS: Reconcile client symlinks (claude, agy)
+        S->>Aud: record_audit_event(INSTALL, SUCCESS)
+        S-->>A: Installation certified & active
     end
-    S->>S: Validate SKILL.md frontmatter
-    S->>FS: Stage and atomically install complete folder
-    S->>FS: Manage symlinks (~/.claude, ~/.gemini, ~/.agents)
-    S->>S: Update manifest.json + usage tracker
-    S->>S: Purge search cache
-    S-->>A: ✅ InstallResult (path, agents, scores)
 ```
+
+[↑ Back to top](#top)
 
 ---
 
@@ -175,7 +180,7 @@ sequenceDiagram
 
 ### Prerequisites
 
-- **Python 3.12+** (validated with Python 3.14 in Ubuntu under PRoot)
+- **Python 3.12+** (validated through Python 3.14)
 - **Git** (for cloning skill sources)
 - **GitHub token** (optional, for 5000 req/hr vs 60)
 
@@ -211,99 +216,84 @@ printf "Enter SKILL_SWARM_GITHUB_TOKEN (hidden): " && read -s val && echo && ech
 
 > **Note on GitHub Token:** Skill Swarm uses the GitHub API to calculate Mathematical Trust Scores (stars, recent activity, issues) for skills. **If the token is missing, the system will completely skip raw GitHub searches** to prevent inventing inaccurate scores, and will automatically defer entirely to the official alternate registries (Smithery, MCP Registry, Skills.sh, Glama).
 
-### Configure Your AI Agent Globally
+### Configure Your AI Agent Globally (Auto-Plug)
 
-Skill Swarm uses **stdio** transport — the AI client launches the Python process and communicates via stdin/stdout. This means the client is responsible for starting the server and passing environment variables.
+Run the autonomous synchronizer to register `skill-swarm` automatically across all detected AI environments:
 
-> **How secrets work with stdio:** The client launches the MCP process. Keep the GitHub token in the client environment or in a private wrapper; do not commit it to this repository.
+```bash
+./scripts/skill-swarm-sync.sh
+```
 
-Install the package with `pip install -e .` first. The editable installation makes
-`PYTHONPATH` unnecessary and lets the clients start the server from any directory.
-Use one persistent virtual environment and register its absolute Python path in
-each client; do not add a project `.mcp.json`, because it would shadow or conflict
-with the global registration.
-
----
+Or configure manually:
 
 #### Claude Code
 
 Register it in the user scope:
 
 ```bash
-claude mcp add --scope user skill-swarm \
-  -e SKILL_SWARM_ENV_FILE="$HOME/.env" \
-  -- "$PWD/.venv/bin/python" -m skill_swarm.server
+claude mcp add skill-swarm \
+  -- /home/ancruz/Documents/workspaces/skill-swarm-mcp/scripts/skill-swarm-mcp-launch.sh
 ```
-
----
 
 #### Antigravity CLI (`agy`)
 
-`agy` stores global MCP servers in `~/.gemini/config/mcp_config.json`.
+Add to `~/.gemini/config/mcp_config.json`:
 
-Register it with the CLI:
-
-```bash
-agy mcp add --env SKILL_SWARM_ENV_FILE="$HOME/.env" \
-  skill-swarm "$PWD/.venv/bin/python" -m skill_swarm.server
+```json
+{
+  "mcpServers": {
+    "skill-swarm": {
+      "command": "/home/ancruz/Documents/workspaces/skill-swarm-mcp/scripts/skill-swarm-mcp-launch.sh"
+    }
+  }
+}
 ```
-
----
 
 #### Codex
 
-Codex stores global MCP configuration in `~/.codex/config.toml`:
+Codex consumes the canonical directory natively (`~/.agents/skills/`). To register the server in `~/.codex/config.json`:
 
-```bash
-cat << 'EOF' >> ~/.codex/config.toml
-
-[mcpServers.skill-swarm]
-command = "python"
-args = ["-m", "skill_swarm.server"]
-env = { SKILL_SWARM_ENV_FILE = "~/.env" }
-EOF
+```json
+{
+  "mcpServers": {
+    "skill-swarm": {
+      "command": "/home/ancruz/Documents/workspaces/skill-swarm-mcp/scripts/skill-swarm-mcp-launch.sh"
+    }
+  }
+}
 ```
-*Note: Run Codex from inside the virtual environment (`uv run codex`) so `python` resolves correctly.*
+
+[↑ Back to top](#top)
 
 ---
 
-#### Quick Comparison
+## Consolidated 3-Tool Surface (AEP Pattern)
 
-| Client | Global MCP configuration | Global skill discovery |
-| --- | --- | --- |
-| Claude Code | User-scoped `claude mcp add --scope user` | `~/.claude/skills/` |
-| Antigravity CLI (`agy`) | `~/.gemini/config/mcp_config.json` | `~/.gemini/config/skills/` |
-| Codex | `~/.codex/config.toml` | `~/.agents/skills/` |
+Skill Swarm groups capabilities into a consolidated surface matching AEP's orientation and lifecycle control plane design:
 
-### Verify
+| Tool | Action Options | Description |
+|---|---|---|
+| **`skill_discover`** | `capabilities`, `discover`, `match`, `search` | Unified discovery router: returns autonomy manifest, matches locally, or queries 5 registries. |
+| **`skill_manage`** | `list`, `info`, `install`, `uninstall`, `update`, `health`, `audit` | Unified lifecycle control plane: inventory, inspection, atomic install, health scoring, and SHA-256 audit. |
+| **`cherry_pick_context`** | _(direct call)_ | Token-efficient extractor of specific markdown sections from SKILL.md. |
 
-```bash
-# Unit tests
-.venv/bin/python -m pytest -q tests/test_core.py
+### Backward Compatibility Forwarders
 
-# Confirm each global client sees the server
-claude mcp list
-agy mcp list
-codex mcp list
-```
+For seamless compatibility with existing agent prompts, all legacy tools are preserved:
 
----
+| Legacy Tool | Forwarded To |
+|---|---|
+| `search_skills(query, scope, limit)` | `skill_discover(action="search", query=...)` |
+| `match_skills(task_description, threshold)` | `skill_discover(action="match", query=...)` |
+| `install_skill(name, source, agents)` | `skill_manage(action="install", name=..., source=...)` |
+| `uninstall_skill(name)` | `skill_manage(action="uninstall", name=...)` |
+| `update_skill(name)` | `skill_manage(action="update", name=...)` |
+| `list_skills(agent)` | `skill_manage(action="list", agent_filter=...)` |
+| `get_skill_info(name)` | `skill_manage(action="info", name=...)` |
+| `skill_health(name)` | `skill_manage(action="health", name=...)` |
+| `verify_audit()` | `skill_manage(action="audit")` |
 
-## 9 Tools Reference
-
-| Tool                    | Description                              | Key Args                        |
-| ----------------------- | ---------------------------------------- | ------------------------------- |
-| **search_skills**       | Search 5 registries with trust scoring   | `query`, `scope`, `limit`       |
-| **match_skills**        | BM25F + 7-signal local matching          | `task_description`, `threshold` |
-| **install_skill**       | Download, scan, trust-check, install     | `name`, `source`, `agents`      |
-| **uninstall_skill**     | Remove skill + symlinks + tracking       | `name`                          |
-| **update_skill**        | Check and apply updates from source      | `name`                          |
-| **list_skills**         | Inventory with health and usage stats    | `agent`                         |
-| **get_skill_info**      | Full metadata + content of a skill       | `name`                          |
-| **cherry_pick_context** | Extract specific markdown sections       | `skill_name`, `sections`        |
-| **skill_health**        | Usage analytics and dead skill detection | _(none)_                        |
-
-See [TOOLS.md](TOOLS.md) for complete parameter reference and examples.
+[↑ Back to top](#top)
 
 ---
 
@@ -316,6 +306,7 @@ Skills follow the Agent Skills standard with one user-global source:
 ├── {skill-name}/
 │   └── SKILL.md                    # Skill content (always SKILL.md)
 ├── manifest.json                   # Installed skills registry
+├── audit.db                        # Tamper-evident SHA-256 chained audit ledger
 ├── .usage.json                     # Usage tracking data
 └── .cache/                         # TTL-based search/trust cache
 
@@ -326,16 +317,14 @@ Skills follow the Agent Skills standard with one user-global source:
 ~/.gemini/config/skills/            # agy current global path (symlinks)
 ├── {skill-name} -> ~/.agents/skills/{skill-name}
 └── ...
-
-~/.gemini/antigravity-cli/skills/  # agy migration compatibility
-├── {skill-name} -> ~/.agents/skills/{skill-name}
-└── ...
 ```
 
 - The **folder name** identifies the skill
 - The **file** is always `SKILL.md` (standard compliance)
 - Agent directories contain **directory symlinks** to the global source
 - Legacy `~/.agent/skills/` content is migrated without overwriting conflicts
+
+[↑ Back to top](#top)
 
 ---
 
@@ -344,12 +333,17 @@ Skills follow the Agent Skills standard with one user-global source:
 Every remote search result includes a trust score (0.0-1.0) computed from 5 git-quality dimensions:
 
 ```mermaid
-pie title Trust Score Weights
-    "Maintenance" : 25
-    "Security" : 25
-    "Recency" : 20
-    "Popularity" : 20
-    "Completeness" : 10
+flowchart LR
+    subgraph Dimensions["5 Git-Quality Trust Dimensions"]
+        D1["Maintenance (25%): push frequency, open issues"]
+        D2["Security (25%): license trust, unarchived"]
+        D3["Recency (20%): exponential decay (half-life 180d)"]
+        D4["Popularity (20%): log-normalized stars, forks, watchers"]
+        D5["Completeness (10%): docs, topics, metadata"]
+    end
+    D1 & D2 & D3 & D4 & D5 --> Score["Weighted Trust Score: 0.0 - 1.0"]
+
+    style Score fill:#10B981,stroke:#059669,color:#fff
 ```
 
 | Dimension        | Weight | Signals                                                            |
@@ -369,6 +363,8 @@ pie title Trust Score Weights
 | 0.25-0.49 | **WARNING** | Manual review recommended |
 | < 0.25    | **REJECT**  | Block installation        |
 
+[↑ Back to top](#top)
+
 ---
 
 ## Matcher V2 — BM25F + Multi-Signal Scoring
@@ -376,32 +372,23 @@ pie title Trust Score Weights
 Local skill matching uses 7 weighted signals:
 
 ```mermaid
-graph LR
-    RQ["Raw Query"] --> NQ["Normalize<br/>stopword removal"]
+flowchart LR
+    RQ["Raw Query"] --> NQ["Normalize: stopword removal"]
     NQ --> Q["Keywords"]
-    Q --> E["Exact Match<br/>w=30"]
-    Q --> P["Prefix Match<br/>w=20"]
-    Q --> PH["Phrase Match<br/>w=15"]
-    Q --> B["BM25F<br/>w=15"]
-    Q --> J["Jaccard Tags<br/>w=10"]
-    Q --> FN["Fuzzy Name<br/>w=7"]
-    Q --> FD["Fuzzy Desc<br/>w=3"]
+    Q --> E["Exact Match (w=30)"]
+    Q --> P["Prefix Match (w=20)"]
+    Q --> PH["Phrase Match (w=15)"]
+    Q --> B["BM25F (w=15)"]
+    Q --> J["Jaccard Tags (w=10)"]
+    Q --> FN["Fuzzy Name (w=7)"]
+    Q --> FD["Fuzzy Desc (w=3)"]
 
-    E --> S["Σ Weighted Score<br/>0.0 – 1.0"]
-    P --> S
-    PH --> S
-    B --> S
-    J --> S
-    FN --> S
-    FD --> S
+    E & P & PH & B & J & FN & FD --> S["Weighted Score: 0.0 - 1.0"]
 
     style RQ fill:#F59E0B,stroke:#D97706,color:#fff
     style NQ fill:#F59E0B,stroke:#D97706,color:#fff
     style Q fill:#8B5CF6,stroke:#6D28D9,color:#fff
     style S fill:#10B981,stroke:#059669,color:#fff
-    style E fill:#EF4444,stroke:#DC2626,color:#fff
-    style P fill:#F97316,stroke:#EA580C,color:#fff
-    style B fill:#3B82F6,stroke:#2563EB,color:#fff
 ```
 
 | Signal            | Weight | Description                                          |
@@ -411,10 +398,10 @@ graph LR
 | Phrase match      | 15     | Query found as substring in any field                |
 | BM25F             | 15     | Field-weighted relevance (name=3x, tags=2x, desc=1x) |
 | Jaccard tags      | 10     | Set similarity on tags                               |
-| Fuzzy name        | 7      | Typo-tolerant name matching (rapidfuzz)              |
+| Fuzzy name        | 7      | Typo-tolerant name matching (RapidFuzz C++ SIMD)     |
 | Fuzzy description | 3      | Partial match on description                         |
 
-BM25F parameters optimized for small corpus (10-100 skills): k1=1.2, b=0.3.
+[↑ Back to top](#top)
 
 ---
 
@@ -422,59 +409,11 @@ BM25F parameters optimized for small corpus (10-100 skills): k1=1.2, b=0.3.
 
 | Platform    | Status       | Notes                                 |
 | ----------- | ------------ | ------------------------------------- |
-| **Linux**   | Full support | Primary development platform          |
+| **Linux**   | Full support | Landlock LSM sandboxing + pure ctypes |
 | **macOS**   | Full support | Same Python ecosystem                 |
-| **Windows** | Full support | Native symlinks supported (see below) |
+| **Windows** | Full support | Native symlinks supported             |
 
-### Windows Symlinks
-
-Skill Swarm uses directory symlinks (`os.symlink`) to share skills across agents. Windows supports native NTFS symlinks:
-
-| Windows Version                   | Requirement                                                              |
-| --------------------------------- | ------------------------------------------------------------------------ |
-| **Windows 11**                    | No configuration needed — symlinks work for all users                    |
-| **Windows 10** (Creators Update+) | Enable **Developer Mode**: Settings → Update & Security → For Developers |
-| **Windows 10** (older builds)     | Run as Administrator                                                     |
-
-Python's `os.symlink()` works natively on Windows when the above permissions are met. No WSL required.
-
-**Manual creation** (if needed):
-
-```powershell
-# PowerShell
-New-Item -ItemType SymbolicLink -Path "$HOME\.claude\skills\my-skill" -Target "$HOME\.agents\skills\my-skill"
-
-# Command Prompt (Administrator)
-mklink /D "%USERPROFILE%\.claude\skills\my-skill" "%USERPROFILE%\.agents\skills\my-skill"
-```
-
-**AI Agent Compatibility:**
-
-| Client | Integration | Skill directory |
-| --- | --- | --- |
-| **Claude Code** | MCP stdio + symlinks | `~/.claude/skills/` |
-| **agy** | MCP stdio + symlinks | `~/.gemini/config/skills/` |
-| **Codex** | MCP stdio + native source | `~/.agents/skills/` |
-
----
-
-## Configuration Reference
-
-All settings are loaded from environment variables (prefix: `SKILL_SWARM_`):
-
-| Variable                               | Default   | Description                                  |
-| -------------------------------------- | --------- | -------------------------------------------- |
-| `SKILL_SWARM_GITHUB_TOKEN`             | _(empty)_ | GitHub PAT for API access (5000 req/hr)      |
-| `SKILL_SWARM_CACHE_SEARCH_TTL`         | `3600`    | Search cache TTL in seconds                  |
-| `SKILL_SWARM_CACHE_TRUST_TTL`          | `86400`   | Trust score cache TTL in seconds             |
-| `SKILL_SWARM_SEARCH_TIMEOUT`           | `15.0`    | HTTP timeout for registry queries            |
-| `SKILL_SWARM_SEARCH_MAX_RESULTS`       | `10`      | Max results per search                       |
-| `SKILL_SWARM_SECURITY_THRESHOLD`       | `0.5`     | Min security scan score to install           |
-| `SKILL_SWARM_SKILLSSH_ENABLED`         | `true`    | Enable Skills.sh as primary registry         |
-| `SKILL_SWARM_SKILLSSH_NPX_PATH`        | `npx`     | Path to npx binary for `skills find`         |
-| `SKILL_SWARM_SKILLSSH_GITHUB_FALLBACK` | `true`    | Use GitHub topic search when npx unavailable |
-| `SKILL_SWARM_SKILLSSH_SEARCH_TIMEOUT`  | `30.0`    | Timeout for npx subprocess calls             |
-| `SKILL_SWARM_SEARCH_PHASE1_MIN_RESULTS` | `3`     | Phase 2 search trigger threshold             |
+[↑ Back to top](#top)
 
 ---
 
@@ -483,74 +422,72 @@ All settings are loaded from environment variables (prefix: `SKILL_SWARM_`):
 ```
 skill-swarm-mcp/
 ├── src/skill_swarm/
-│   ├── server.py              # MCPServer entry point (9 tools)
-│   ├── config.py              # Pydantic Settings + path helpers
+│   ├── server.py              # Consolidated 3-tool FastMCP server
+│   ├── config.py              # Resilient storage fallback & Pydantic settings
 │   ├── models.py              # Data models (SkillInfo, TrustScore, etc.)
 │   ├── core/
-│   │   ├── scanner.py         # Security pattern scanner
-│   │   ├── normalizer.py      # Query normalization (stopword removal)
-│   │   ├── matcher.py         # BM25F + multi-signal scoring
-│   │   ├── installer.py       # Download, scan, install pipeline
-│   │   ├── registry.py        # 5-registry parallel search (Skills.sh primary)
-│   │   ├── trust.py           # Git-quality trust scoring engine
-│   │   ├── cache.py           # TTL file-based cache
-│   │   └── usage.py           # Skill usage tracking
+│   │   ├── audit.py           # SPEC-2: SHA-256 chained audit ledger & masking
+│   │   ├── topos.py           # SPEC-3: Topos DAG anti-co-dependency guard
+│   │   ├── sandbox.py         # SPEC-4: Linux Landlock LSM in-process sandbox
+│   │   ├── health.py          # SPEC-5: Multidimensional health & security veto
+│   │   ├── installer.py       # Atomic install, symlink, and manifest pipeline
+│   │   ├── scanner.py         # Regex & AST security pattern scanner
+│   │   ├── matcher.py         # BM25F + multi-signal scoring (RapidFuzz)
+│   │   ├── registry.py        # 5-registry parallel search
+│   │   └── usage.py           # Resilient usage tracking
 │   └── tools/
-│       ├── search.py          # search_skills implementation
-│       ├── install.py         # install/uninstall wiring
-│       ├── inventory.py       # list/match/get_info wiring
-│       └── cherry_pick.py     # Section extraction
-├── agnos/                         # Agnostic specs (paradigm bridge)
-│   ├── spec-orchestration.md
-│   ├── spec-task-dependencies.md
-│   └── spec-agent-dispatch.md
-├── skill/
-│   ├── SKILL.md               # Self-describing skill file
-│   └── references/            # Skill reference docs
+│       ├── inventory.py       # List, match, health, and audit tools
+│       ├── search.py          # Multi-registry search implementation
+│       ├── install.py         # Install, uninstall, update wiring
+│       └── cherry_pick.py     # Targeted section extraction
+├── scripts/
+│   ├── setup.sh               # Clean-slate user-space provisioner & --check
+│   ├── skill-swarm-mcp-launch.sh  # Hermetic Python FastMCP launcher
+│   └── skill-swarm-sync.sh    # Pre-flight validator & multi-client auto-plug
+├── docs/
+│   ├── blueprint_re_sdd.md    # RE-as-SDD formal specifications (SPECs 1-5)
+│   ├── PROJECT.md             # Project premise and active intent
+│   ├── MILESTONES.md          # Pipeline milestone tracking
+│   └── COMPACT.md             # Context compaction instructions
 ├── tests/
-│   ├── test_core.py           # Unit tests (25)
+│   ├── conftest.py            # Isolated tmp_path test fixture
+│   ├── test_re_sdd_resilience.py  # SPECs 1-5 validation suite
+│   ├── test_core.py           # Core unit tests (25)
 │   ├── test_e2e_effectiveness.py  # E2E V1 (19 tests)
 │   └── test_e2e_v2.py         # E2E V2 — trust, cache, BM25F (19 tests)
 ├── LICENSE                    # Apache 2.0
-├── README.md                  # This file
-├── TOOLS.md                   # Complete tool reference
-├── pyproject.toml             # Python package config
-├── uv.lock                    # Reproducible dependency lock
-├── .env.example               # Environment template
-└── .gitignore
+├── README.md                  # Single source of truth documentation
+└── pyproject.toml             # Python package config (v1.2.0)
 ```
+
+[↑ Back to top](#top)
 
 ---
 
-## Development
+## Development & Testing
 
 ```bash
-# Install with dev dependencies
-pip install -e ".[dev]"
+# Verify system health (100% read-only audit)
+./scripts/setup.sh --check
 
-# Run all non-network tests
-.venv/bin/python -m pytest tests/ -v -m "not network"
+# Run full test suite (68 tests, 100% pass)
+.venv/bin/python -m pytest tests/
 
-# Run with network tests (requires internet access)
-.venv/bin/python -m pytest tests/ -v
-
-# Test a single search
-.venv/bin/python -c "
-import asyncio, sys, json
-sys.path.insert(0, 'src')
-from skill_swarm.tools.search import search_skills
-results = asyncio.run(search_skills('filesystem', scope='remote', limit=3))
-for r in results:
-    trust = r.trust.score if r.trust else 'N/A'
-    print(f'{r.name} ({r.source}) trust={trust}')
-"
+# Run resilience test suite specifically
+.venv/bin/python -m pytest tests/test_re_sdd_resilience.py
 ```
+
+[↑ Back to top](#top)
 
 ---
 
-## License
+## License and Terms
 
-Apache License 2.0 — see [LICENSE](LICENSE) for details.
+This project is licensed under the terms of the **Apache License 2.0**. Refer to the [`LICENSE`](LICENSE) file for the full terms and conditions of use, reproduction, distribution, and patent grants.
+
+- **Compatibility**: Permissive and enterprise-friendly, compatible with MIT, BSD-3-Clause, and public-domain databases (SQLite).
+- **Patent Grant**: Features bilateral patent defense and licensing protections (Section 3 of Apache 2.0).
+- **Disclaimer of Warranty & Limitation of Liability**: Software provided on an "AS IS" basis without warranties or conditions of any kind (Sections 7 & 8 of Apache 2.0).
 
 ```
 Copyright 2025 Anthony Cruz
@@ -558,8 +495,8 @@ Copyright 2025 Anthony Cruz
 
 <div align="center">
 
-**Built with MCP Protocol and AI-assisted engineering.**
+**Built with FastMCP Protocol and Topos Pipeline Engineering.**
 
-[⬆ Back to Top](#skill-swarm)
+[↑ Back to top](#top)
 
 </div>

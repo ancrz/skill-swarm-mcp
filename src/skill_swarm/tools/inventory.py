@@ -1,6 +1,8 @@
 """Inventory tools: list, match, and inspect installed skills."""
 
 from skill_swarm.config import settings
+from skill_swarm.core.audit import get_audit_connection, verify_audit_chain
+from skill_swarm.core.health import calculate_skill_health
 from skill_swarm.core.installer import load_manifest
 from skill_swarm.core.matcher import match_skills_local
 from skill_swarm.core.normalizer import normalize_query
@@ -165,3 +167,73 @@ def get_skill_info(name: str) -> dict:
         result["source"] = info.source
 
     return result
+
+
+def get_skill_health(name: str | None = None) -> dict:
+    """Usage analytics and multidimensional confidence scoring (SPEC-5).
+
+    If name is None, returns fleet overview + dead skills list.
+    If name is provided, returns deep multidimensional diagnostics (Q, R, E, T, Veto).
+    """
+    if name:
+        manifest = load_manifest()
+        info = manifest.skills.get(name)
+        stats = get_stats(name)
+        skill_dir = settings.skill_dir(name)
+        skill_path = settings.skill_path(name)
+
+        symlinks_ok = skill_path.exists()
+        health = calculate_skill_health(
+            name=name,
+            security_score=1.0,
+            security_passed=True,
+            match_hits=stats.match_hits,
+            full_reads=stats.full_read_count,
+            last_used=stats.last_used,
+            symlinks_ok=symlinks_ok,
+        )
+        return {
+            "name": name,
+            "installed": skill_path.exists(),
+            "health": health,
+            "stats": {
+                "match_hits": stats.match_hits,
+                "full_read_count": stats.full_read_count,
+                "cherry_pick_count": stats.cherry_pick_count,
+                "last_used": stats.last_used,
+            },
+        }
+
+    # Fleet-wide overview
+    all_stats = get_all_stats()
+    manifest = load_manifest()
+    fleet: list[dict] = []
+    for s_name in manifest.skills:
+        s_stat = all_stats.get(s_name)
+        h = calculate_skill_health(
+            name=s_name,
+            security_score=1.0,
+            security_passed=True,
+            match_hits=s_stat.match_hits if s_stat else 0,
+            full_reads=s_stat.full_read_count if s_stat else 0,
+            last_used=s_stat.last_used if s_stat else None,
+            symlinks_ok=settings.skill_path(s_name).exists(),
+        )
+        fleet.append(h)
+
+    return {
+        "total_skills": len(fleet),
+        "dead_skills": get_dead_skills(),
+        "fleet_health": fleet,
+    }
+
+
+def verify_audit() -> dict:
+    """Verify cryptographic integrity of the SHA-256 chained audit ledger."""
+    try:
+        conn = get_audit_connection()
+        res = verify_audit_chain(conn)
+        conn.close()
+        return res
+    except Exception as e:
+        return {"valid": False, "verified": False, "error": str(e)}

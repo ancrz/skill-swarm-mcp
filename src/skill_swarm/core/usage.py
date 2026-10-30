@@ -30,12 +30,16 @@ def _load_all() -> dict[str, dict]:
 
 
 def _save_all(data: dict[str, dict]) -> None:
-    """Save all usage stats to disk."""
-    settings.skills_dir.mkdir(parents=True, exist_ok=True)
-    _usage_path().write_text(
-        json.dumps(data, indent=2, default=str),
-        encoding="utf-8",
-    )
+    """Save all usage stats to disk with fail-soft protection."""
+    try:
+        settings.ensure_writable_skills_dir()
+        settings.skills_dir.mkdir(parents=True, exist_ok=True)
+        _usage_path().write_text(
+            json.dumps(data, indent=2, default=str),
+            encoding="utf-8",
+        )
+    except (OSError, PermissionError) as e:
+        logger.warning("Could not save usage stats to %s: %s", _usage_path(), e)
 
 
 def _now_iso() -> str:

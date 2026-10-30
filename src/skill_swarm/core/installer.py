@@ -16,7 +16,10 @@ import httpx
 import yaml
 
 from skill_swarm.config import settings
+from skill_swarm.core.audit import get_audit_connection, record_audit_event
+from skill_swarm.core.sandbox import get_landlock_status
 from skill_swarm.core.scanner import scan_skill
+from skill_swarm.core.topos import SkillToposGuard, ToposVerdict
 from skill_swarm.models import InstallResult, SkillInfo, SkillManifest
 
 logger = logging.getLogger("skill-swarm.installer")
@@ -69,12 +72,16 @@ def load_manifest() -> SkillManifest:
 
 
 def save_manifest(manifest: SkillManifest) -> None:
-    """Save the global skills manifest."""
-    settings.skills_dir.mkdir(parents=True, exist_ok=True)
-    settings.manifest_path.write_text(
-        manifest.model_dump_json(indent=2),
-        encoding="utf-8",
-    )
+    """Save the global skills manifest with resilient fail-soft fallback."""
+    try:
+        settings.ensure_writable_skills_dir()
+        settings.skills_dir.mkdir(parents=True, exist_ok=True)
+        settings.manifest_path.write_text(
+            manifest.model_dump_json(indent=2),
+            encoding="utf-8",
+        )
+    except (OSError, PermissionError) as e:
+        logger.warning("Could not save manifest to %s: %s", settings.manifest_path, e)
 
 
 def normalize_skill_filenames() -> int:
@@ -141,6 +148,23 @@ async def install_skill(
         skill_filename = "SKILL.md"
         skill_dir = settings.skill_dir(name)
         final_path = settings.skill_path(name)
+
+        settings.ensure_writable_skills_dir()
+
+        # Topos DAG pre-check
+        verdict, _, topos_logs = SkillToposGuard.audit_skill_dependencies([name], {name: []})
+        if verdict == ToposVerdict.BLOCKED:
+            try:
+                conn = get_audit_connection()
+                record_audit_event(conn, name, "INSTALL", "BLOCKED", {"errors": topos_logs})
+                conn.close()
+            except Exception:
+                pass
+            return InstallResult(skill_name=name, success=False, errors=topos_logs)
+
+        # Landlock probe (logging fail-soft)
+        landlock_status = get_landlock_status()
+        logger.debug("Landlock status: %s", landlock_status)
 
         # Check if already installed
         if final_path.exists():
@@ -225,6 +249,19 @@ async def install_skill(
             )
             save_manifest(manifest)
 
+            try:
+                conn = get_audit_connection()
+                record_audit_event(
+                    conn,
+                    name,
+                    "INSTALL",
+                    "SUCCESS",
+                    {"path": str(final_path), "score": scan_result.score, "agents": linked_agents},
+                )
+                conn.close()
+            except Exception as ae:
+                logger.debug("Audit logging failed: %s", ae)
+
             logger.info(
                 "Installed '%s' → %s (linked to: %s)", name, final_path, linked_agents
             )
@@ -290,6 +327,13 @@ async def uninstall_skill(name: str) -> InstallResult:
     manifest = load_manifest()
     manifest.skills.pop(name, None)
     save_manifest(manifest)
+
+    try:
+        conn = get_audit_connection()
+        record_audit_event(conn, name, "UNINSTALL", "SUCCESS", {"warnings": warnings})
+        conn.close()
+    except Exception as ae:
+        logger.debug("Audit logging failed: %s", ae)
 
     logger.info("Uninstalled '%s'", name)
     return InstallResult(skill_name=name, success=True, errors=warnings)

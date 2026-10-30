@@ -1,9 +1,32 @@
-"""Configuration for skill-swarm MCP server."""
+"""Configuration for skill-swarm MCP server with resilient storage fallback."""
 
+import logging
 import os
 from pathlib import Path
+import tempfile
+import time
 
 from pydantic_settings import BaseSettings
+
+logger = logging.getLogger("skill-swarm.config")
+
+
+def check_storage_writability(target_dir: Path | None = None) -> bool:
+    """Pre-flight probe to verify if a directory is writable.
+
+    Attempts to create, write, and immediately remove an atomic probe file.
+    Returns True if writable, False if read-only or permission denied.
+    """
+    path = target_dir or (Path.home() / ".agents" / "skills")
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+        probe_file = path / f".writability_probe_{os.getpid()}_{int(time.time() * 1000)}"
+        probe_file.write_text("ok", encoding="utf-8")
+        probe_file.unlink(missing_ok=True)
+        return True
+    except (OSError, PermissionError) as e:
+        logger.debug("Storage writability probe failed for %s: %s", path, e)
+        return False
 
 
 class Settings(BaseSettings):
@@ -27,6 +50,9 @@ class Settings(BaseSettings):
 
     native_agents: set[str] = {"codex"}
     agent_aliases: dict[str, str] = {"gemini": "agy", "antigravity": "agy"}
+
+    # Volatile fallback flag when storage is unwritable
+    is_volatile: bool = False
 
     # Manifest file for tracking installed skills
     manifest_file: str = "manifest.json"
@@ -58,7 +84,26 @@ class Settings(BaseSettings):
     skillssh_github_fallback: bool = True  # GitHub topic search when npx unavailable
     skillssh_search_timeout: float = 30.0  # npx can be slow on first run
 
-    model_config = {"env_prefix": "SKILL_SWARM_", "env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
+    model_config = {
+        "env_prefix": "SKILL_SWARM_",
+        "env_file": ".env",
+        "env_file_encoding": "utf-8",
+        "extra": "ignore",
+    }
+
+    def ensure_writable_skills_dir(self) -> Path:
+        """Verify storage writability, falling back to volatile tempdir if read-only."""
+        if not check_storage_writability(self.skills_dir):
+            if not self.is_volatile:
+                fallback = Path(tempfile.mkdtemp(prefix="skill-swarm-volatile-"))
+                logger.warning(
+                    "Storage directory '%s' is not writable! Failing-soft to volatile temp directory: '%s'",
+                    self.skills_dir,
+                    fallback,
+                )
+                self.skills_dir = fallback
+                self.is_volatile = True
+        return self.skills_dir
 
     @property
     def python_cmd(self) -> str:
@@ -73,6 +118,10 @@ class Settings(BaseSettings):
     @property
     def cache_path(self) -> Path:
         return self.skills_dir / self.cache_dir
+
+    @property
+    def audit_db_path(self) -> Path:
+        return self.skills_dir / "audit.db"
 
     def skill_dir(self, name: str) -> Path:
         """Return the containing directory for a skill: skills_dir/{name}/"""
